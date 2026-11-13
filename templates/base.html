@@ -4,7 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#101b2c" />
-    <title>{% block title %}Smart Web Shield (sws) | Akıllı Web Güvenliği{% endblock %}</title>
+    <title>
+      {% block title %}Smart Web Shield (sws) | Akıllı Web Güvenliği{% endblock
+      %}
+    </title>
     <link
       rel="stylesheet"
       href="{{ url_for('static', filename='style.css') }}"
@@ -27,8 +30,8 @@
     </header>
     <main class="page">{% block content %}{% endblock %}</main>
     <footer>
-      Öğrenci projesi · Bu prototip yalnızca gönderdiğiniz metin alanlarını
-      inceler; canlı trafiği korumaz.
+      sws · Bu prototip yalnızca gönderdiğiniz metin alanlarını inceler; canlı
+      trafiği korumaz.
     </footer>
   </body>
 </html>
