@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import math
 from contextlib import closing
 from pathlib import Path
 from typing import Any
@@ -29,9 +30,13 @@ def initialize(database: str | Path) -> None:
                 decision TEXT NOT NULL CHECK (decision IN ('İzin verildi', 'Engellendi')),
                 reasons TEXT NOT NULL,
                 ai_rf_result TEXT,
-                ai_rf_confidence REAL,
+                ai_rf_confidence REAL CHECK (
+                    ai_rf_confidence IS NULL OR ai_rf_confidence BETWEEN 0 AND 1
+                ),
                 ai_dl_result TEXT,
-                ai_dl_confidence REAL,
+                ai_dl_confidence REAL CHECK (
+                    ai_dl_confidence IS NULL OR ai_dl_confidence BETWEEN 0 AND 1
+                ),
                 attack_type TEXT
             )
             """
@@ -41,9 +46,15 @@ def initialize(database: str | Path) -> None:
         }
         for column, column_type in (
             ("ai_rf_result", "TEXT"),
-            ("ai_rf_confidence", "REAL"),
+            (
+                "ai_rf_confidence",
+                "REAL CHECK (ai_rf_confidence IS NULL OR ai_rf_confidence BETWEEN 0 AND 1)",
+            ),
             ("ai_dl_result", "TEXT"),
-            ("ai_dl_confidence", "REAL"),
+            (
+                "ai_dl_confidence",
+                "REAL CHECK (ai_dl_confidence IS NULL OR ai_dl_confidence BETWEEN 0 AND 1)",
+            ),
             ("attack_type", "TEXT"),
         ):
             if column not in columns:
@@ -53,6 +64,16 @@ def initialize(database: str | Path) -> None:
 
 
 def add_event(database: str | Path, event: dict[str, Any]) -> None:
+    for key in ("ai_rf_confidence", "ai_dl_confidence"):
+        confidence = event.get(key)
+        if confidence is not None and (
+            isinstance(confidence, bool)
+            or not isinstance(confidence, (int, float))
+            or not 0 <= confidence <= 1
+            or not math.isfinite(confidence)
+        ):
+            raise ValueError(f"{key} must be a finite number between 0 and 1.")
+
     with closing(connect(database)) as connection, connection:
         connection.execute(
             """

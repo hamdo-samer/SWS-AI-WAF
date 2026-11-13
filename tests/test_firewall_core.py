@@ -27,6 +27,17 @@ class FirewallCoreTests(unittest.TestCase):
         self.assertGreaterEqual(result.score, 65)
         self.assertIn("SQL Injection (OR/AND manipülasyonu)", result.reasons)
 
+    def test_form_encoded_plus_sql_injection_is_blocked(self):
+        result = inspect_request(
+            "/login",
+            "GET",
+            "user=admin'+OR+'1'='1",
+            "TestBrowser/1.0",
+        )
+
+        self.assertEqual(result.decision, "Engellendi")
+        self.assertIn("SQL Injection (OR/AND manipülasyonu)", result.reasons)
+
     def test_xss_script_payload_is_blocked(self):
         result = inspect_request(
             "/search",
@@ -50,6 +61,30 @@ class FirewallCoreTests(unittest.TestCase):
 
                 self.assertEqual(result.decision, "Engellendi")
                 self.assertIn("Betik etiketi göstergesi", result.reasons)
+
+    def test_double_encoded_xss_is_blocked(self):
+        result = inspect_request(
+            "/search",
+            "GET",
+            "q=%253Cscript%253Ealert(1)%253C%252Fscript%253E",
+            "TestBrowser/1.0",
+        )
+
+        self.assertEqual(result.decision, "Engellendi")
+        self.assertIn("Betik etiketi göstergesi", result.reasons)
+
+    def test_form_encoded_body_is_inspected(self):
+        result = inspect_request(
+            "/login",
+            "POST",
+            "",
+            "TestBrowser/1.0",
+            "user=admin%27+OR+%271%27%3D%271",
+            "application/x-www-form-urlencoded",
+        )
+
+        self.assertEqual(result.decision, "Engellendi")
+        self.assertIn("SQL Injection (OR/AND manipülasyonu)", result.reasons)
 
     def test_sql_comment_marker_is_detected(self):
         result = inspect_request("/login", "GET", "user=admin--", "TestBrowser/1.0")
@@ -76,6 +111,24 @@ class FirewallCoreTests(unittest.TestCase):
     def test_input_size_is_limited(self):
         with self.assertRaises(ValueError):
             inspect_request("/" + "a" * 4096, "GET")
+        with self.assertRaisesRegex(ValueError, "gövdesi"):
+            inspect_request("/", "POST", body="a" * (1024 * 1024 + 1))
+
+    def test_confidence_values_must_be_between_zero_and_one(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "confidence.sqlite3"
+            initialize(database)
+            for value in (-0.1, 1.1, float("nan"), True):
+                with self.subTest(value=value), self.assertRaises(ValueError):
+                    add_event(database, {
+                        "source": "Yerel",
+                        "method": "GET",
+                        "path": "/urunler",
+                        "score": 0,
+                        "decision": "İzin verildi",
+                        "reasons": ("Test",),
+                        "ai_rf_confidence": value,
+                    })
 
     def test_events_are_persisted_and_summarized(self):
         with tempfile.TemporaryDirectory() as directory:

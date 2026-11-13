@@ -19,6 +19,13 @@ python app.py
 
 Tarayıcıda `http://127.0.0.1:5000` adresini açın. İstek inceleme formuna yol, yöntem ve isteğe bağlı metaveri girin. Sonuçlar `instance\firewall.sqlite3` içinde tutulur.
 
+Canlı proxy demosu için, `http://127.0.0.1:8080` adresinde erişilebilir bir upstream
+site varken `python proxy_app.py` çalıştırın. Proxy, upstream'e iletmeden önce yol,
+sorgu ve en fazla 1 MiB'lık istek gövdesini kural motoruyla inceler. AI tahmini
+danışma amaçlıdır; model çalışmazsa hata günlüğe kaydedilir ve karar kural motorunda
+kalır. `app.py` ile `proxy_app.py` varsayılan olarak aynı portu (5000) kullandığından,
+ikisini aynı anda çalıştırmak için port yapılandırmasını ayrıca değiştirmek gerekir.
+
 ## Sayfalar
 
 - `/` — isteği manuel inceleme
@@ -39,8 +46,10 @@ python -m unittest discover -s tests -v
 ## Modelleri eğitme
 
 `data/csic_database.csv` veri kümesi kullanılır. Eğitim ve test bölümleri
-etiketlere göre dengeli biçimde ayrılır; TF-IDF yalnızca eğitim bölümünde
-öğrenilir. TensorFlow destekli, uyumlu bir Python ortamında:
+etiketlere göre dengeli biçimde ayrılmadan önce yinelenen normalize istekler tekilleştirilir;
+çakışan etiketli istek grupları açıkça uyarılarak dışarıda bırakılır. TF-IDF sözlüğü,
+CNN'in eğitim alt kümesinde öğrenilir; ayrılmış test verisi eğitimde kullanılmaz.
+TensorFlow destekli, uyumlu bir Python ortamında:
 
 ```powershell
 pip install -r requirements-training.txt

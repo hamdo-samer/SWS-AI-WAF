@@ -6,6 +6,7 @@ from ai_engine import AIDetector, AIPrediction
 from storage import initialize, add_event
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
 TARGET_SITE = "http://127.0.0.1:8080"
 DB_PATH = "instance/firewall.sqlite3"
 initialize(DB_PATH)
@@ -15,20 +16,36 @@ ai_detector = AIDetector()
 @app.route('/', defaults={'path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE'])
 @app.route('/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
 def proxy(path):
-    # 1. استقبال الطلب
-    full_path = "/" + path
-    query_string = request.query_string.decode('utf-8')
-    if query_string:
-        full_path += "?" + query_string
+    raw_target = request.environ.get("RAW_URI") or request.environ.get("REQUEST_URI")
+    raw_path = raw_target.split("?", 1)[0] if raw_target else "/" + path
+    if not raw_path.startswith("/"):
+        raw_path = "/" + path
+    try:
+        query_string = request.query_string.decode("utf-8")
+    except UnicodeDecodeError:
+        return Response("Invalid query encoding", status=400, mimetype="text/plain")
 
     method = request.method
     user_agent = request.headers.get('User-Agent', '')
+    body_bytes = request.get_data(cache=True)
+    body = body_bytes.decode("utf-8", errors="replace")
+    body_content_type = request.headers.get("Content-Type", "")
 
-    # 2. فك تشفير المسار (لمنع تخطي الفحص بالهجمات المشفرة)
-    decoded_path = urllib.parse.unquote(full_path)
+    # Inspect the same raw path and query representation that will be forwarded.
+    try:
+        result = inspect_request(
+            raw_path,
+            method,
+            query_string,
+            user_agent,
+            body,
+            body_content_type,
+        )
+    except ValueError as error:
+        return Response(str(error), status=413, mimetype="text/plain")
+    except TypeError as error:
+        return Response(str(error), status=400, mimetype="text/plain")
 
-    # 3. تمرير الطلب المفكوك لمحرك القواعد والذكاء الاصطناعي
-    result = inspect_request(decoded_path, method, "", user_agent)
     # Ignore AI analysis for static assets.
     static_extensions = (
         ".css",
@@ -42,24 +59,30 @@ def proxy(path):
         ".woff",
         ".woff2",
     )
-    static_path = urllib.parse.urlsplit(full_path).path
+    static_path = urllib.parse.urlsplit(raw_path).path
     if static_path.lower().endswith(static_extensions):
-        ai_result = AIPrediction("İzin verildi", 1.0, "İzin verildi", 1.0)
+        ai_result = AIPrediction(None, None, None, None)
     else:
-        ai_result = ai_detector.predict(method, decoded_path, "")
+        try:
+            ai_result = ai_detector.predict(method, raw_path, query_string)
+        except (RuntimeError, ValueError, TypeError, OSError):
+            app.logger.exception(
+                "AI advisory inference failed; continuing with the rule-engine decision."
+            )
+            ai_result = AIPrediction(None, None, None, None)
 
     # 4. تسجيل الطلب في قاعدة البيانات
     add_event(DB_PATH, {
         "source": request.remote_addr or "Proxy",
         "method": method,
-        "path": decoded_path,
+        "path": raw_path + (f"?{query_string}" if query_string else ""),
         "score": result.score,
         "decision": result.decision,
         "reasons": result.reasons,
-        "ai_rf_result": str(ai_result.rf_decision),
-        "ai_rf_confidence": float(ai_result.rf_confidence or 0.0),
-        "ai_dl_result": str(ai_result.dl_decision),
-        "ai_dl_confidence": float(ai_result.dl_confidence or 0.0),
+        "ai_rf_result": ai_result.rf_decision,
+        "ai_rf_confidence": ai_result.rf_confidence,
+        "ai_dl_result": ai_result.dl_decision,
+        "ai_dl_confidence": ai_result.dl_confidence,
         "attack_type": "Canli Proxy"
     })
 
@@ -68,7 +91,7 @@ def proxy(path):
         return Response("Smart Web Shield (sws): Tehlikeli istek engellendi! (403 Forbidden)", status=403, mimetype="text/plain")
 
     # 6. تمرير الطلب الآمن للموقع الحقيقي
-    url = f"{TARGET_SITE}/{path}"
+    url = f"{TARGET_SITE}{raw_path}"
     if query_string:
         url += f"?{query_string}"
 
@@ -78,7 +101,7 @@ def proxy(path):
             url=url,
             headers={key: value for (key, value)
                      in request.headers if key != 'Host'},
-            data=request.get_data(),
+            data=body_bytes,
             cookies=request.cookies,
             allow_redirects=False,
             timeout=5

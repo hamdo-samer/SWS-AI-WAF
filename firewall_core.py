@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from urllib.parse import unquote
+from urllib.parse import unquote, unquote_plus
 
 
 @dataclass(frozen=True)
@@ -38,22 +38,46 @@ _SIGNALS = (
 )
 _ALLOWED_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"})
 _MAX_FIELD_LENGTH = 4096
+_MAX_BODY_LENGTH = 1024 * 1024
 
 
-def inspect_request(path: str, method: str, query: str = "", user_agent: str = "") -> Inspection:
+def _decode_for_inspection(value: str, *, plus_as_space: bool = False) -> str:
+    decoded = unquote_plus(value) if plus_as_space else unquote(value)
+    for _ in range(4):
+        next_value = unquote(decoded)
+        if next_value == decoded:
+            break
+        decoded = next_value
+    return decoded
+
+
+def inspect_request(
+    path: str,
+    method: str,
+    query: str = "",
+    user_agent: str = "",
+    body: str = "",
+    body_content_type: str = "",
+) -> Inspection:
     """Score user-supplied request metadata without sending it over the network."""
-    fields = (path, method, query, user_agent)
+    fields = (path, method, query, user_agent, body, body_content_type)
     if any(not isinstance(value, str) for value in fields):
         raise TypeError("İstek alanları metin olmalıdır.")
-    if any(len(value) > _MAX_FIELD_LENGTH for value in fields):
+    if any(len(value) > _MAX_FIELD_LENGTH for value in (path, method, query, user_agent)):
         raise ValueError("Her alan en fazla 4096 karakter olabilir.")
+    if len(body) > _MAX_BODY_LENGTH:
+        raise ValueError("İstek gövdesi en fazla 1048576 karakter olabilir.")
 
     score = 0
     reasons: list[str] = []
     normalized_method = method.strip().upper()
-    normalized_path = unquote(path)
-    normalized_query = unquote(query)
-    combined = f"{normalized_path}\n{normalized_query}"
+    normalized_path = _decode_for_inspection(path)
+    normalized_query = _decode_for_inspection(query, plus_as_space=True)
+    is_form_body = body_content_type.split(";", 1)[0].strip().lower() == (
+        "application/x-www-form-urlencoded"
+    )
+    normalized_body = _decode_for_inspection(body, plus_as_space=is_form_body)
+    combined = f"{normalized_path}\n{normalized_query}\n{normalized_body}"
 
     if not path.strip().startswith("/"):
         score += 15

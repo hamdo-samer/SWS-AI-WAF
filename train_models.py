@@ -102,6 +102,35 @@ def _calculate_metrics(labels: np.ndarray, predictions: np.ndarray) -> dict[str,
     }
 
 
+def _deduplicate_requests(
+    texts: list[str],
+    labels: np.ndarray,
+) -> tuple[list[str], np.ndarray, int]:
+    labels_by_text: dict[str, set[int]] = {}
+    for text, label in zip(texts, labels):
+        labels_by_text.setdefault(text, set()).add(int(label))
+
+    conflicting_texts = {
+        text for text, text_labels in labels_by_text.items() if len(text_labels) > 1
+    }
+    unique_texts: list[str] = []
+    unique_labels: list[int] = []
+    seen: set[str] = set()
+    for text, label in zip(texts, labels):
+        if text in seen or text in conflicting_texts:
+            continue
+        seen.add(text)
+        unique_texts.append(text)
+        unique_labels.append(int(label))
+
+    if set(unique_labels) != {0, 1}:
+        raise ValueError(
+            "The dataset must contain both classes after duplicate requests with "
+            "conflicting labels are excluded."
+        )
+    return unique_texts, np.asarray(unique_labels, dtype=np.int32), len(conflicting_texts)
+
+
 def _tensorflow() -> Any:
     try:
         return importlib.import_module("tensorflow")
@@ -147,7 +176,16 @@ def train_models(
     model_directory: str | Path = DEFAULT_MODEL_DIRECTORY,
 ) -> dict[str, dict[str, Any]]:
     tensorflow = _tensorflow()
-    texts, labels = load_dataset(dataset_path)
+    loaded_texts, loaded_labels = load_dataset(dataset_path)
+    texts, labels, conflicting_request_count = _deduplicate_requests(
+        loaded_texts, loaded_labels
+    )
+    if conflicting_request_count:
+        print(
+            "Warning: excluded "
+            f"{conflicting_request_count} unique requests with conflicting labels.",
+            file=sys.stderr,
+        )
     x_train, x_test, y_train, y_test = train_test_split(
         texts,
         labels,
@@ -156,14 +194,24 @@ def train_models(
         stratify=labels,
     )
 
+    x_cnn_train, x_cnn_validation, y_cnn_train, y_cnn_validation = train_test_split(
+        x_train,
+        y_train,
+        test_size=0.1,
+        random_state=RANDOM_STATE,
+        stratify=y_train,
+    )
     vectorizer = TfidfVectorizer(
         analyzer="char",
         ngram_range=(2, 4),
         max_features=5000,
         dtype=np.float32,
     )
-    x_train_vectors = vectorizer.fit_transform(x_train)
+    vectorizer.fit(x_cnn_train)
+    x_train_vectors = vectorizer.transform(x_train)
     x_test_vectors = vectorizer.transform(x_test)
+    x_cnn_train_vectors = vectorizer.transform(x_cnn_train)
+    x_cnn_validation_vectors = vectorizer.transform(x_cnn_validation)
 
     rf_model = RandomForestClassifier(
         n_estimators=100,
@@ -179,19 +227,12 @@ def train_models(
     if x_train_vectors.shape[1] < 8:
         raise ValueError("The dataset produced too few text features to train the CNN.")
     tensorflow.keras.utils.set_random_seed(RANDOM_STATE)
-    x_cnn_train, x_cnn_validation, y_cnn_train, y_cnn_validation = train_test_split(
-        x_train_vectors,
-        y_train,
-        test_size=0.1,
-        random_state=RANDOM_STATE,
-        stratify=y_train,
-    )
     batch_size = 64
     train_dataset = _sparse_dataset(
-        tensorflow, x_cnn_train, y_cnn_train, batch_size, shuffle=True
+        tensorflow, x_cnn_train_vectors, y_cnn_train, batch_size, shuffle=True
     )
     validation_dataset = _sparse_dataset(
-        tensorflow, x_cnn_validation, y_cnn_validation, batch_size, shuffle=False
+        tensorflow, x_cnn_validation_vectors, y_cnn_validation, batch_size, shuffle=False
     )
     test_dataset = _sparse_dataset(
         tensorflow, x_test_vectors, y_test, batch_size, shuffle=False
@@ -232,6 +273,15 @@ def train_models(
     ).reshape(-1)
     cnn_predictions = (cnn_probabilities >= 0.5).astype(np.int32)
     metrics["1D-CNN"] = _calculate_metrics(y_test, cnn_predictions)
+    evaluation_metadata = {
+        "split_strategy": "deduplicated_request_stratified_holdout",
+        "input_rows": len(loaded_texts),
+        "unique_requests": len(texts),
+        "conflicting_request_groups_excluded": conflicting_request_count,
+        "test_unique_requests": len(y_test),
+    }
+    for scores in metrics.values():
+        scores["evaluation"] = evaluation_metadata
 
     output_directory = Path(model_directory)
     output_directory.mkdir(parents=True, exist_ok=True)
@@ -243,7 +293,10 @@ def train_models(
         encoding="utf-8",
     )
 
-    print(f"Loaded {len(texts)} labeled requests from {dataset_path}.")
+    print(
+        f"Loaded {len(loaded_texts)} rows; trained on {len(texts)} unique requests "
+        f"from {dataset_path}."
+    )
     for model_name, scores in metrics.items():
         print(
             f"{model_name}: accuracy={scores['accuracy']:.4f}, "
