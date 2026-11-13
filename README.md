@@ -1,4 +1,4 @@
-# Kalkan — Akıllı Web Güvenliği
+# Smart Web Shield (sws) — Akıllı Web Güvenliği
 
 Türkçe arayüzlü, eğitim amacı taşıyan yerel web isteği inceleme prototipi. İstek metaverisini açıklanabilir kurallarla puanlar; sonuçları SQLite veritabanına kaydeder ve panelde özetler.
 AI model tahminleri danışma amaçlıdır; istek kararını yalnızca kural motoru belirler.
@@ -57,4 +57,4 @@ bağımlılıklarıyla RF modeli kullanılabilir; CNN için TensorFlow gerekir. 
 dosyalarını yalnızca güvendiğiniz kaynaktan yükleyin: joblib dosyaları Python
 kodu çalıştırabilir. Modeller eğitilmemişse uygulama AI çıktısı uydurmaz.
 
-Bu bir eğitim demosudur; ağ trafiğini yönlendirmez, gerçek sitelere istek göndermez ve üretim WAF'ının yerine geçmez. Canlıya almadan önce kimlik doğrulama, CSRF koruması, TLS, güvenlik testleri ve uzman incelemesi eklenmelidir.
+Bu bir eğitim demosudur; ağ trafiğini yönlendirmez, gerçek sitelere istek göndermez ve üretim ortamında kullanılan bir web uygulaması güvenlik duvarının yerine geçmez. Canlıya almadan önce kimlik doğrulama, CSRF koruması, TLS, güvenlik testleri ve uzman incelemesi eklenmelidir.

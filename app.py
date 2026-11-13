@@ -54,8 +54,8 @@ def _create_pdf(events: Sequence[sqlite3.Row]) -> bytes:
     font_path = next((candidate for candidate in font_candidates if candidate.is_file()), None)
     if font_path is None:
         raise RuntimeError("A Unicode TrueType font is required to generate the PDF report.")
-    if "KalkanReport" not in pdfmetrics.getRegisteredFontNames():
-        pdfmetrics.registerFont(TTFont("KalkanReport", str(font_path)))
+    if "swsReport" not in pdfmetrics.getRegisteredFontNames():
+        pdfmetrics.registerFont(TTFont("swsReport", str(font_path)))
 
     buffer = BytesIO()
     document = SimpleDocTemplate(
@@ -67,18 +67,18 @@ def _create_pdf(events: Sequence[sqlite3.Row]) -> bytes:
         bottomMargin=28,
     )
     normal = ParagraphStyle(
-        "KalkanReportNormal",
-        fontName="KalkanReport",
+        "swsReportNormal",
+        fontName="swsReport",
         fontSize=8,
         leading=10,
     )
     header = ParagraphStyle(
-        "KalkanReportHeader",
+        "swsReportHeader",
         parent=normal,
         textColor=colors.white,
     )
     title = ParagraphStyle(
-        "KalkanReportTitle",
+        "swsReportTitle",
         parent=normal,
         fontSize=16,
         leading=20,
@@ -120,7 +120,7 @@ def _create_pdf(events: Sequence[sqlite3.Row]) -> bytes:
     )
     document.build(
         [
-            Paragraph("Kalkan — Web Güvenlik Raporu", title),
+            Paragraph("Smart Web Shield (sws) — Web Güvenlik Raporu", title),
             Paragraph("Son 50 kayıt. AI sonuçları yalnızca yapılandırılmış model varsa gösterilir.", normal),
             Spacer(1, 12),
             table,
@@ -249,7 +249,7 @@ def create_app(test_config: dict | None = None) -> Flask:
 
         attack_type = _SIMULATION_SCENARIOS[scenario]
         path, query = _SIMULATION_PAYLOADS[scenario]
-        user_agent = "KalkanLocalSimulation/1.0"
+        user_agent = "swsLocalSimulation/1.0"
         result = inspect_request(path, "GET", query, user_agent)
         ai_prediction = (
             ai_detector.predict("GET", path, query)
@@ -340,7 +340,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         return Response(
             "\ufeff" + output.getvalue(),
             content_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": "attachment; filename=kalkan_logs.csv"},
+            headers={"Content-Disposition": "attachment; filename=sws_logs.csv"},
         )
 
     @app.get("/export/pdf")
@@ -349,7 +349,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         return Response(
             _create_pdf(events),
             mimetype="application/pdf",
-            headers={"Content-Disposition": "attachment; filename=kalkan_rapor.pdf"},
+            headers={"Content-Disposition": "attachment; filename=sws_rapor.pdf"},
         )
 
     @app.get("/saglik")

@@ -56,12 +56,13 @@ a {
 .brand-mark {
     display: grid;
     place-items: center;
-    width: 37px;
+    width: 44px;
+    flex: 0 0 44px;
     height: 37px;
     border: 1px solid #7e9aff;
     border-radius: 11px;
     color: #9db1ff;
-    font: 700 20px "Space Grotesk", sans-serif
+    font: 700 11px "Space Grotesk", sans-serif
 }
 
 nav {

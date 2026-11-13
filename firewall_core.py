@@ -1,4 +1,4 @@
-"""Explainable, local request-risk checks for an educational WAF prototype."""
+"""Explainable, local request-risk checks for an educational web firewall prototype."""
 
 from __future__ import annotations
 

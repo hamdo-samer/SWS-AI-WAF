@@ -48,7 +48,7 @@ def proxy(path):
 
     # 5. القرار الأمني (رسالة نصية بسيطة لمنع الانهيار)
     if result.decision == "Engellendi":
-        return Response("Kalkan WAF: Tehlikeli istek engellendi! (403 Forbidden)", status=403, mimetype="text/plain")
+        return Response("Smart Web Shield (sws): Tehlikeli istek engellendi! (403 Forbidden)", status=403, mimetype="text/plain")
 
     # 6. تمرير الطلب الآمن للموقع الحقيقي
     url = f"{TARGET_SITE}/{path}"
@@ -63,7 +63,8 @@ def proxy(path):
                      in request.headers if key != 'Host'},
             data=request.get_data(),
             cookies=request.cookies,
-            allow_redirects=False
+            allow_redirects=False,
+            timeout=5
         )
         return Response(resp.content, status=resp.status_code, headers=dict(resp.headers))
     except Exception as e:
