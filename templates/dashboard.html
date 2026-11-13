@@ -5,8 +5,12 @@
   <h1>Kontrol paneli</h1>
   <p>Bu prototipte yapılan son incelemelerin özeti.</p>
   <div class="export-actions">
-    <a href="{{ url_for('export_csv') }}" class="button export-csv">CSV indir</a>
-    <a href="{{ url_for('export_pdf') }}" class="button export-pdf">PDF raporu indir</a>
+    <a href="{{ url_for('export_csv') }}" class="button export-csv"
+      >CSV indir</a
+    >
+    <a href="{{ url_for('export_pdf') }}" class="button export-pdf"
+      >PDF raporu indir</a
+    >
   </div>
 </section>
 <section class="stats-grid">
@@ -28,14 +32,20 @@
 <section class="panel-card table-card">
   <div class="section-head">
     <div>
-      <p class="eyebrow">تقييم مجموعة الاختبار</p>
-      <h2>مقارنة النماذج</h2>
+      <p class="eyebrow">değerlendirme</p>
+      <h2>Model Performance</h2>
     </div>
   </div>
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>النموذج</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1</th></tr>
+        <tr>
+          <th>form</th>
+          <th>Accuracy</th>
+          <th>Precision</th>
+          <th>Recall</th>
+          <th>F1</th>
+        </tr>
       </thead>
       <tbody>
         {% for model_name, scores in model_metrics.items() %}
@@ -50,7 +60,10 @@
       </tbody>
     </table>
   </div>
-  <p class="model-note">مقاييس محفوظة من مجموعة الاختبار المحجوزة، وليست قياسًا مباشرًا أثناء تشغيل الطلب.</p>
+  <p class="model-note">
+    Ölçümler, ayrılmış test paketinden kaydedilir ve uygulama süreci sırasında
+    doğrudan alınmaz.
+  </p>
 </section>
 {% endif %}
 <section class="panel-card table-card">
