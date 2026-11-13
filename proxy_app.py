@@ -2,7 +2,7 @@ import urllib.parse
 import requests
 from flask import Flask, request, Response
 from firewall_core import inspect_request
-from ai_engine import AIDetector
+from ai_engine import AIDetector, AIPrediction
 from storage import initialize, add_event
 
 app = Flask(__name__)
@@ -29,7 +29,24 @@ def proxy(path):
 
     # 3. تمرير الطلب المفكوك لمحرك القواعد والذكاء الاصطناعي
     result = inspect_request(decoded_path, method, "", user_agent)
-    ai_result = ai_detector.predict(method, decoded_path, "")
+    # Ignore AI analysis for static assets.
+    static_extensions = (
+        ".css",
+        ".js",
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".gif",
+        ".ico",
+        ".svg",
+        ".woff",
+        ".woff2",
+    )
+    static_path = urllib.parse.urlsplit(full_path).path
+    if static_path.lower().endswith(static_extensions):
+        ai_result = AIPrediction("İzin verildi", 1.0, "İzin verildi", 1.0)
+    else:
+        ai_result = ai_detector.predict(method, decoded_path, "")
 
     # 4. تسجيل الطلب في قاعدة البيانات
     add_event(DB_PATH, {
