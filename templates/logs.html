@@ -1,0 +1,14 @@
+{% extends "base.html" %} {% block title %}İnceleme Kayıtları | Kalkan{%
+endblock %} {% block content %}
+<section class="page-heading">
+  <p class="eyebrow">DENETİM İZİ</p>
+  <h1>İnceleme kayıtları</h1>
+  <p>
+    En yeni 200 kayıt listelenir. İstek içeriği yerine yol, yöntem, puan ve
+    karar saklanır.
+  </p>
+</section>
+<section class="panel-card table-card">
+  {% include "_events_table.html" %}
+</section>
+{% endblock %}

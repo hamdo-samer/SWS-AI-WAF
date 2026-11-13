@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}İstek İncele | Kalkan{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">WEB İSTEK GÜVENLİĞİ · EĞİTİM MODU</p>
+    <h1>Her isteği <span>önce incele.</span></h1>
+    <p class="intro">HTTP istek bilgilerini yerel kural motoruyla değerlendir, risk puanını gör ve sonucu kayıt altına al.</p>
+  </div>
+  <div class="hero-badge"><span>01</span><br>İNCELE<br><span>→</span><br><span>02</span><br>DEĞERLENDİR</div>
+</section>
+
+{% if result %}
+<section class="result-card {{ 'blocked' if result.decision == 'Engellendi' else 'allowed' }}" aria-live="polite">
+  <div><p class="eyebrow">İNCELEME SONUCU</p><h2>{{ result.decision }}</h2>
+    <p>{{ result.method }} {{ result.path }}</p>
+    <ul>{% for reason in result.reasons %}<li>{{ reason }}</li>{% endfor %}</ul>
+  </div>
+  <div class="score"><strong>{{ result.score }}</strong><span>/ 100 risk</span></div>
+</section>
+{% endif %}
+
+{% if ai_available %}
+<p class="model-note">
+  Yerel {% if ai_rf_available %}Random Forest{% endif %}{% if ai_rf_available and ai_dl_available %} ve {% endif %}{% if ai_dl_available %}1D-CNN{% endif %}
+  modeli yapılandırılmış; tahminler danışma amaçlıdır ve son kararı kural motoru verir.
+  CSIC dışındaki yollar model tarafından yanlış sınıflandırılabilir.
+</p>
+{% else %}
+<p class="model-note">AI modeli henüz yapılandırılmadı. Kural tabanlı inceleme son kararı verir; AI sonucu üretilmiyor.</p>
+{% endif %}
+
+<section class="work-grid">
+  <div class="panel-card form-card">
+    <div class="section-head"><div><p class="eyebrow">MANUEL TEST</p><h2>İstek bilgileri</h2></div><span class="step">01 / 02</span></div>
+    <form method="post" action="{{ url_for('inspect') }}">
+      <label for="path">İstek yolu</label>
+      <input id="path" name="path" maxlength="4096" required placeholder="/urunler" value="{{ request.form.get('path', '') }}">
+      <div class="form-row">
+        <div><label for="method">HTTP yöntemi</label>
+          <select id="method" name="method">
+            {% for method in ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] %}
+            <option value="{{ method }}" {% if request.form.get('method', 'GET') == method %}selected{% endif %}>{{ method }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div><label for="user_agent">Tarayıcı bilgisi</label><input id="user_agent" name="user_agent" maxlength="4096" placeholder="İsteğe bağlı"></div>
+      </div>
+      <label for="query">Sorgu metni</label>
+      <textarea id="query" name="query" maxlength="4096" rows="4" placeholder="İsteğe bağlı inceleme alanı">{{ request.form.get('query', '') }}</textarea>
+      <button class="button" type="submit">İsteği değerlendir <span>→</span></button>
+    </form>
+  </div>
+  <aside class="guide-card">
+    <p class="eyebrow">NASIL ÇALIŞIR?</p><h2>Şeffaf risk puanı</h2>
+    <p>Kontroller; alan uzunluğu, HTTP yöntemi ve istek metnindeki belirgin risk işaretlerini değerlendirir.</p>
+    <div class="threshold"><span class="dot green"></span><span><b>0–49</b><small>İzin verildi</small></span></div>
+    <div class="threshold"><span class="dot red"></span><span><b>50–100</b><small>Engellendi</small></span></div>
+    <a class="text-link" href="{{ url_for('about') }}">Kuralları ve sınırları öğren <span>↗</span></a>
+  </aside>
+</section>
+{% endblock %}

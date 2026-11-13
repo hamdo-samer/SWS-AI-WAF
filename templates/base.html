@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#101b2c" />
+    <title>{% block title %}Kalkan | Akıllı Web Güvenliği{% endblock %}</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='style.css') }}"
+    />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="{{ url_for('index') }}"
+        ><span class="brand-mark">K</span
+        ><span>KALKAN <small>WEB GÜVENLİĞİ</small></span></a
+      >
+      <nav aria-label="Ana menü">
+        <a href="{{ url_for('index') }}">İstek incele</a>
+        <a href="{{ url_for('dashboard') }}">Kontrol paneli</a>
+        <a href="{{ url_for('logs') }}">Kayıtlar</a>
+        <a href="{{ url_for('simulation_page') }}">Yerel senaryolar</a>
+        <a href="{{ url_for('about') }}">Proje hakkında</a>
+      </nav>
+      <span class="status"><i></i> Yerel demo</span>
+    </header>
+    <main class="page">{% block content %}{% endblock %}</main>
+    <footer>
+      Öğrenci projesi · Bu prototip yalnızca gönderdiğiniz metin alanlarını
+      inceler; canlı trafiği korumaz.
+    </footer>
+  </body>
+</html>

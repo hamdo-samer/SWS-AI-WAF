@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Yerel Senaryolar | Kalkan{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <p class="eyebrow">EĞİTİM · YEREL SENARYO</p>
+  <h1>Yerel saldırı vektörü incelemesi</h1>
+  <p>
+    Bir örnek vektör seçin; kural motoru ve varsa yerel AI modeli inceler. Yük
+    yalnızca yerel olarak değerlendirilir; komut çalıştırılmaz ve ağa istek gönderilmez.
+  </p>
+</section>
+<section class="panel-card form-card">
+  <div class="section-head">
+    <div><p class="eyebrow">GÜVENLİ DEMO</p><h2>Örnek vektör</h2></div>
+  </div>
+  <form method="post" action="{{ url_for('send_simulated_scenario') }}">
+    <label for="attack_type">Saldırı türü</label>
+    <select id="attack_type" name="attack_type">
+      {% for key, label in scenarios.items() %}
+      <option value="{{ key }}">{{ label }}</option>
+      {% endfor %}
+    </select>
+    <button class="button" type="submit">Vektörü yerel olarak incele <span>→</span></button>
+  </form>
+</section>
+{% endblock %}

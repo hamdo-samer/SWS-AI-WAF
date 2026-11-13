@@ -1,0 +1,54 @@
+{% extends "base.html" %} {% block title %}Proje Hakkında | Kalkan{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <p class="eyebrow">PROJE NOTLARI</p>
+  <h1>Bu prototip hakkında</h1>
+  <p>
+    Türkçe arayüzlü, yerel çalışan bir web isteği risk değerlendirme demosu.
+  </p>
+</section>
+<section class="about-grid">
+  <article class="panel-card">
+    <p class="eyebrow">İŞLEYİŞ</p>
+    <h2>Ölçülebilir kontroller</h2>
+    <p>
+      Gönderilen yol, yöntem, sorgu metni ve tarayıcı bilgisi kural tabanlı bir
+      puanlayıcıdan geçer. Her eşleşme sonuca gerekçe olarak eklenir; 50 puan ve
+      üzeri “Engellendi” olarak işaretlenir.
+    </p>
+  </article>
+  <article class="panel-card">
+    <p class="eyebrow">VERİ</p>
+    <h2>Yerel kayıt defteri</h2>
+    <p>
+      Karar ve temel istek metaverisi SQLite veritabanına kaydedilir. CSV ve PDF
+      raporları son 1.000 ve 50 kaydı dışa aktarır. AI alanları yalnızca gerçek
+      model çıktısı varsa doldurulur.
+    </p>
+  </article>
+  <article class="panel-card">
+    <p class="eyebrow">AI MODELİ</p>
+    <h2>Random Forest ve 1D-CNN</h2>
+    <p>
+      <code>python train_models.py</code> eğitim/test ayrımı yapıp RF ve 1D-CNN
+      modellerini; uygulamayla ortak Method ve normalize edilmiş URL ön işlemesini;
+      ayrıca test metriklerini kaydeder. Modeller
+      henüz eğitilmemişse AI tahmini üretilmez; test metrikleri kontrol
+      panelinde görünür. AI çıktıları yalnızca danışma amaçlıdır; nihai kararı
+      kural motoru verir. Eğitim kümesinin dışındaki yollar yanlış sınıflandırılabilir.
+    </p>
+  </article>
+  <article class="panel-card caution">
+    <p class="eyebrow">ÖNEMLİ SINIR</p>
+    <h2>Üretim güvenlik duvarı değildir</h2>
+    <p>
+      Uygulama gerçek web trafiğini yönlendirmez, ağ isteği göndermez ve
+      sunucuyu korumaz. Yerel senaryolar örnek saldırı metnini yalnızca
+      uygulama içinde inceler; komut çalıştırmaz veya ağa istek göndermez.
+      Üretim ortamı için doğrulanmış bir WAF, kimlik doğrulama, TLS ve güvenlik
+      testleri gerekir. Joblib model dosyalarını yalnızca güvendiğiniz kaynaktan
+      kullanın.
+    </p>
+  </article>
+</section>
+{% endblock %}

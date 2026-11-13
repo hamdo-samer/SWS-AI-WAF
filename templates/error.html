@@ -1,0 +1,9 @@
+{% extends "base.html" %} {% block title %}Hata {{ code }} | Kalkan{% endblock
+%} {% block content %}
+<section class="empty error-page">
+  <p class="eyebrow">İSTEK TAMAMLANAMADI</p>
+  <h1>{{ code }}</h1>
+  <p>{{ message }}</p>
+  <a class="button" href="{{ url_for('index') }}">Ana sayfaya dön</a>
+</section>
+{% endblock %}
