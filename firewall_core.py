@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from urllib.parse import unquote
 
 
 @dataclass(frozen=True)
@@ -50,7 +51,9 @@ def inspect_request(path: str, method: str, query: str = "", user_agent: str = "
     score = 0
     reasons: list[str] = []
     normalized_method = method.strip().upper()
-    combined = f"{path}\n{query}"
+    normalized_path = unquote(path)
+    normalized_query = unquote(query)
+    combined = f"{normalized_path}\n{normalized_query}"
 
     if not path.strip().startswith("/"):
         score += 15

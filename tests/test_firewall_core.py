@@ -38,6 +38,19 @@ class FirewallCoreTests(unittest.TestCase):
         self.assertEqual(result.decision, "Engellendi")
         self.assertIn("Betik etiketi göstergesi", result.reasons)
 
+    def test_percent_encoded_xss_is_blocked_in_path_and_query(self):
+        requests = (
+            ("/%3Cscript%3E", ""),
+            ("/iletisim.html", "name=%3Cscript%3Ealert%28%27Hack%27%29%3C%2Fscript%3E"),
+        )
+
+        for path, query in requests:
+            with self.subTest(path=path, query=query):
+                result = inspect_request(path, "GET", query, "TestBrowser/1.0")
+
+                self.assertEqual(result.decision, "Engellendi")
+                self.assertIn("Betik etiketi göstergesi", result.reasons)
+
     def test_sql_comment_marker_is_detected(self):
         result = inspect_request("/login", "GET", "user=admin--", "TestBrowser/1.0")
 
