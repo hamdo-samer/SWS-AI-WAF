@@ -19,14 +19,22 @@ from storage import add_event, initialize, recent_events, statistics
 
 
 _SIMULATION_SCENARIOS = {
-    "sqli": "SQLi",
-    "xss": "XSS",
-    "cmdi": "CMDi",
+    "sqli": "SQL Injection (SQLi)",
+    "xss": "Cross-Site Scripting (XSS)",
+    "cmdi": "Command Injection (CMDi)",
+    "traversal": "Path Traversal (Dizin Geçişi)",
+    "sql_comment": "SQL Comment (Yorum Satırı)",
+    "long_path": "Aşırı Uzun İstek Yolu (Buffer Overflow)",
+    "no_ua": "Eksik Tarayıcı Bilgisi (Bot/Scanner)",
 }
 _SIMULATION_PAYLOADS = {
-    "sqli": ("/login", "user=admin' OR '1'='1"),
-    "xss": ("/search", "q=<script>alert('XSS')</script>"),
-    "cmdi": ("/ping", "ip=127.0.0.1; cat /etc/passwd"),
+    "sqli": ("/login", "user=admin' OR '1'='1", "HackerSimulator/1.0"),
+    "xss": ("/search", "q=<script>alert('XSS')</script>", "HackerSimulator/1.0"),
+    "cmdi": ("/ping", "ip=127.0.0.1; cat /etc/passwd", "HackerSimulator/1.0"),
+    "traversal": ("/download", "file=../../etc/passwd", "HackerSimulator/1.0"),
+    "sql_comment": ("/login", "user=admin'--", "HackerSimulator/1.0"),
+    "long_path": ("/" + "a" * 600, "", "HackerSimulator/1.0"),
+    "no_ua": ("/products", "", ""),
 }
 
 
@@ -248,15 +256,18 @@ def create_app(test_config: dict | None = None) -> Flask:
             abort(400, description="Geçersiz yerel senaryo seçimi.")
 
         attack_type = _SIMULATION_SCENARIOS[scenario]
-        path, query = _SIMULATION_PAYLOADS[scenario]
-        user_agent = "swsLocalSimulation/1.0"
+        path, query, user_agent = _SIMULATION_PAYLOADS[scenario]
         result = inspect_request(path, "GET", query, user_agent)
         ai_prediction = (
             ai_detector.predict("GET", path, query)
             if ai_detector.is_available
             else None
         )
-        logged_path = path + ("&" if "?" in path else "?") + query
+        logged_path = (
+            path + ("&" if "?" in path else "?") + query
+            if query
+            else path
+        )
         add_event(
             app.config["DATABASE"],
             {

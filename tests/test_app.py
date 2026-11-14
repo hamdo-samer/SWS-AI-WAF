@@ -155,8 +155,58 @@ class AppFlowTests(unittest.TestCase):
                 response = app.test_client().get("/simulasyon")
 
             self.assertEqual(response.status_code, 200)
-            self.assertIn(b'<option value="sqli">SQLi</option>', response.data)
+            self.assertIn(
+                b'<option value="sqli">SQL Injection (SQLi)</option>',
+                response.data,
+            )
+            self.assertIn(b'<option value="no_ua">', response.data)
             self.assertNotIn(b"admin", response.data)
+
+    def test_missing_user_agent_scenario_is_logged_as_a_local_inspection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "test.sqlite3"
+            with patch("app.AIDetector") as detector_factory:
+                detector_factory.return_value.is_available = False
+                app = create_app({
+                    "TESTING": True,
+                    "DATABASE": str(database),
+                })
+
+            response = app.test_client().post(
+                "/simulasyon/gonder",
+                data={"attack_type": "no_ua"},
+                follow_redirects=True,
+            )
+
+            self.assertEqual(response.status_code, 200)
+            event = recent_events(database)[0]
+            self.assertEqual(event["path"], "/products")
+            self.assertEqual(event["score"], 10)
+            self.assertEqual(event["decision"], "İzin verildi")
+            self.assertIn("Tarayıcı bilgisi bulunamadı", event["reasons"])
+
+    def test_long_path_scenario_logs_length_signal_without_claiming_a_block(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "test.sqlite3"
+            with patch("app.AIDetector") as detector_factory:
+                detector_factory.return_value.is_available = False
+                app = create_app({
+                    "TESTING": True,
+                    "DATABASE": str(database),
+                })
+
+            response = app.test_client().post(
+                "/simulasyon/gonder",
+                data={"attack_type": "long_path"},
+                follow_redirects=True,
+            )
+
+            self.assertEqual(response.status_code, 200)
+            event = recent_events(database)[0]
+            self.assertEqual(len(event["path"]), 601)
+            self.assertEqual(event["score"], 20)
+            self.assertEqual(event["decision"], "İzin verildi")
+            self.assertIn("İstek yolu beklenenden uzun", event["reasons"])
 
     def test_csv_and_pdf_exports_are_downloadable(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -28,16 +28,25 @@ def format_request_text(
     if not all(isinstance(value, str) for value in (method, url, query)):
         raise TypeError("Request features must be strings.")
 
-    url = normalize_request_url(url)
+    normalized_url = normalize_request_url(url)
     query = query.strip()
     if query:
-        url += ("&" if "?" in url else "?") + query
+        normalized_url += ("&" if "?" in normalized_url else "?") + query
 
-    return "\n".join(
-        f"{name}: {value.strip()}"
-        for name, value in (
-            ("Method", method),
-            ("URL", url),
-        )
-        if value.strip()
+    lowered_url = normalized_url.lower()
+    length = len(normalized_url)
+    special_chars = sum(
+        not character.isalnum()
+        and character not in ("/", "?", "=", "&", ".", "_", "-")
+        for character in normalized_url
     )
+    has_sql_keywords = int(
+        re.search(r"\b(?:select|union|or|drop)\b", lowered_url) is not None
+    )
+    has_script = int("<script>" in lowered_url)
+    features = (
+        f"LEN:{length // 10} SPEC:{special_chars} "
+        f"SQL:{has_sql_keywords} JS:{has_script}"
+    )
+
+    return f"Method: {method.strip()}\nURL: {normalized_url}\n{features}"

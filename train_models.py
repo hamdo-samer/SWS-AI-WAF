@@ -238,6 +238,7 @@ def train_models(
         tensorflow, x_test_vectors, y_test, batch_size, shuffle=False
     )
 
+    print("جاري بناء نموذج 1D-CNN...")
     cnn_model = tensorflow.keras.models.Sequential(
         [
             tensorflow.keras.layers.Input(shape=(x_train_vectors.shape[1], 1)),

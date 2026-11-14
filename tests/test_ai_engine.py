@@ -65,7 +65,10 @@ class AIDetectorTests(unittest.TestCase):
             self.assertIsNone(prediction.dl_decision)
             self.assertEqual(
                 vectorizer.values,
-                ["Method: GET\nURL: /products?category=books"],
+                [
+                    "Method: GET\nURL: /products?category=books\n"
+                    "LEN:2 SPEC:0 SQL:0 JS:0"
+                ],
             )
 
     def test_configured_cnn_returns_binary_decision_and_confidence(self):

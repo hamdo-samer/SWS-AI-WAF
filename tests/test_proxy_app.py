@@ -133,6 +133,102 @@ class ProxyAppTests(unittest.TestCase):
             self.assertIsNone(event["ai_rf_result"])
             self.assertIsNone(event["ai_rf_confidence"])
 
+    def test_high_confidence_ai_attack_overrides_an_allow_rule(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "proxy.sqlite3"
+            initialize(database)
+            client = proxy_app.app.test_client()
+            prediction = proxy_app.AIPrediction(
+                "Engellendi", 0.95, "İzin verildi", 0.99
+            )
+
+            with (
+                patch.object(proxy_app, "DB_PATH", str(database)),
+                patch.object(proxy_app.ai_detector, "predict", return_value=prediction),
+                patch.object(proxy_app.requests, "request") as forward_request,
+            ):
+                response = client.get(
+                    "/products",
+                    headers={"User-Agent": "TestBrowser/1.0"},
+                )
+
+            self.assertEqual(response.status_code, 403)
+            self.assertIn(b"AI Override", response.data)
+            forward_request.assert_not_called()
+            event = recent_events(database)[0]
+            self.assertEqual(event["decision"], "Engellendi")
+            self.assertEqual(event["attack_type"], "AI-Ensemble")
+            self.assertIn("AI Override", event["reasons"])
+
+    def test_high_confidence_benign_ai_prediction_does_not_override_rules(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "proxy.sqlite3"
+            initialize(database)
+            client = proxy_app.app.test_client()
+            upstream_response = SimpleNamespace(
+                content=b"ok",
+                status_code=200,
+                headers={"Content-Type": "text/plain"},
+            )
+            prediction = proxy_app.AIPrediction(
+                "İzin verildi", 0.99, "İzin verildi", 0.98
+            )
+
+            with (
+                patch.object(proxy_app, "DB_PATH", str(database)),
+                patch.object(proxy_app.ai_detector, "predict", return_value=prediction),
+                patch.object(
+                    proxy_app.requests,
+                    "request",
+                    return_value=upstream_response,
+                ) as forward_request,
+            ):
+                response = client.get(
+                    "/products",
+                    headers={"User-Agent": "TestBrowser/1.0"},
+                )
+
+            self.assertEqual(response.status_code, 200)
+            forward_request.assert_called_once()
+            event = recent_events(database)[0]
+            self.assertEqual(event["decision"], "İzin verildi")
+            self.assertEqual(event["attack_type"], "Rule-Based")
+            self.assertNotIn("AI Override", event["reasons"])
+
+    def test_attack_prediction_below_confidence_threshold_does_not_override(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "proxy.sqlite3"
+            initialize(database)
+            client = proxy_app.app.test_client()
+            upstream_response = SimpleNamespace(
+                content=b"ok",
+                status_code=200,
+                headers={"Content-Type": "text/plain"},
+            )
+            prediction = proxy_app.AIPrediction(
+                "Engellendi", 0.94, None, None
+            )
+
+            with (
+                patch.object(proxy_app, "DB_PATH", str(database)),
+                patch.object(proxy_app.ai_detector, "predict", return_value=prediction),
+                patch.object(
+                    proxy_app.requests,
+                    "request",
+                    return_value=upstream_response,
+                ) as forward_request,
+            ):
+                response = client.get(
+                    "/products",
+                    headers={"User-Agent": "TestBrowser/1.0"},
+                )
+
+            self.assertEqual(response.status_code, 200)
+            forward_request.assert_called_once()
+            event = recent_events(database)[0]
+            self.assertEqual(event["decision"], "İzin verildi")
+            self.assertEqual(event["attack_type"], "Rule-Based")
+
 
 if __name__ == "__main__":
     unittest.main()

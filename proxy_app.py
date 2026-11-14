@@ -71,24 +71,48 @@ def proxy(path):
             )
             ai_result = AIPrediction(None, None, None, None)
 
+    final_decision = result.decision
+    override_reason = ""
+    if result.decision == "İzin verildi":
+        confident_attack_scores = [
+            confidence
+            for decision, confidence in (
+                (ai_result.rf_decision, ai_result.rf_confidence),
+                (ai_result.dl_decision, ai_result.dl_confidence),
+            )
+            if decision == "Engellendi" and confidence is not None
+        ]
+        if max(confident_attack_scores, default=0.0) >= 0.95:
+            final_decision = "Engellendi"
+            override_reason = " [AI Override: Yüksek güvenli tehdit tespiti]"
+
     # 4. تسجيل الطلب في قاعدة البيانات
     add_event(DB_PATH, {
         "source": request.remote_addr or "Proxy",
         "method": method,
         "path": raw_path + (f"?{query_string}" if query_string else ""),
         "score": result.score,
-        "decision": result.decision,
-        "reasons": result.reasons,
+        "decision": final_decision,
+        "reasons": (
+            tuple(result.reasons) + (override_reason,)
+            if override_reason
+            else result.reasons
+        ),
         "ai_rf_result": ai_result.rf_decision,
         "ai_rf_confidence": ai_result.rf_confidence,
         "ai_dl_result": ai_result.dl_decision,
         "ai_dl_confidence": ai_result.dl_confidence,
-        "attack_type": "Canli Proxy"
+        "attack_type": "AI-Ensemble" if override_reason else "Rule-Based",
     })
 
     # 5. القرار الأمني (رسالة نصية بسيطة لمنع الانهيار)
-    if result.decision == "Engellendi":
-        return Response("Smart Web Shield (sws): Tehlikeli istek engellendi! (403 Forbidden)", status=403, mimetype="text/plain")
+    if final_decision == "Engellendi":
+        return Response(
+            "Smart Web Shield (sws): Tehlikeli istek engellendi! "
+            f"(403 Forbidden){override_reason}",
+            status=403,
+            mimetype="text/plain",
+        )
 
     # 6. تمرير الطلب الآمن للموقع الحقيقي
     url = f"{TARGET_SITE}{raw_path}"

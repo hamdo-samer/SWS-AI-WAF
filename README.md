@@ -56,13 +56,18 @@ pip install -r requirements-training.txt
 python train_models.py
 ```
 
-Eğitim ve uygulama aynı `Method` ve normalize edilmiş `URL` metnini kullanır;
-CSIC mutlak adresleri modelleme öncesi istek yoluna dönüştürülür.
+Eğitim ve uygulama aynı `Method`, normalize edilmiş `URL` ve URL'den türetilen
+`LEN`, `SPEC`, `SQL` ve `JS` özellik metnini kullanır; SQL anahtar sözcüğü
+özelliği yalnızca tam sözcük eşleşmelerini sayar. CSIC mutlak adresleri
+modelleme öncesi istek yoluna dönüştürülür.
 Bu özellikler değişirse modelleri yeniden eğitin. Eğitim
-`models/random_forest.joblib`, `models/vectorizer.joblib`,
-`models/1d_cnn.keras` ve elde tutulan test bölümü için `models/metrics.json`
-üretir. Modellerin karşılaştırması kontrol panelinde görünür. Ana uygulama
-bağımlılıklarıyla RF modeli kullanılabilir; CNN için TensorFlow gerekir. Model
+`models/random_forest.joblib`, `models/vectorizer.joblib` ve
+`models/1d_cnn.keras` (1D-CNN) dosyalarını, ayrıca elde tutulan test
+bölümü için `models/metrics.json` üretir. Modellerin karşılaştırması kontrol
+panelinde görünür. Ana uygulama bağımlılıklarıyla RF modeli kullanılabilir;
+1D-CNN için TensorFlow gerekir. Canlı proxy'de kural motoru izin verse bile,
+AI modellerinden biri saldırı kararı verip en az 0.95 güvene ulaşırsa istek
+engellenir. Model
 dosyalarını yalnızca güvendiğiniz kaynaktan yükleyin: joblib dosyaları Python
 kodu çalıştırabilir. Modeller eğitilmemişse uygulama AI çıktısı uydurmaz.
 

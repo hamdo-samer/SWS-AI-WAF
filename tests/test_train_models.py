@@ -61,7 +61,8 @@ class TrainingDataTests(unittest.TestCase):
             self.assertEqual(labels.tolist(), [0, 1])
             self.assertEqual(
                 texts[0],
-                "Method: GET\nURL: /products?category=books",
+                "Method: GET\nURL: /products?category=books\n"
+                "LEN:2 SPEC:0 SQL:0 JS:0",
             )
             self.assertNotIn("Pragma", texts[0])
             self.assertNotIn("User-Agent", texts[0])
