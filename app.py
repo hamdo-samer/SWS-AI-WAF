@@ -49,6 +49,16 @@ def _csv_safe(value: object) -> str:
     return text
 
 
+def _format_ai_assessment(result: object, confidence: float | None) -> str:
+    if result is None or result == "":
+        return "—"
+    labels = {"İzin verildi": "Normal", "Engellendi": "Anomali"}
+    label = labels.get(str(result), str(result))
+    if confidence is None:
+        return label
+    return f"{label} (%{confidence * 100:.0f})"
+
+
 def _create_pdf(events: Sequence[sqlite3.Row]) -> bytes:
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
@@ -95,16 +105,23 @@ def _create_pdf(events: Sequence[sqlite3.Row]) -> bytes:
         fontSize=16,
         leading=20,
     )
-    headers = ("Zaman", "Kaynak", "Yol", "Risk", "Karar", "AI (RF)")
+    headers = ("Zaman", "Kaynak", "Yol", "Risk", "Karar", "AI (RF)", "AI (DL)")
     table_data = [[Paragraph(escape(cell), header) for cell in headers]]
     for event in events:
         values = (
             event["created_at"],
             event["source"],
-            event["method"] + " " + event["path"],
+            f"{event['method']} {event['path']}",
             str(event["score"]),
             event["decision"],
-            event["ai_rf_result"] or "—",
+            _format_ai_assessment(
+                event["ai_rf_result"],
+                event["ai_rf_confidence"],
+            ),
+            _format_ai_assessment(
+                event["ai_dl_result"],
+                event["ai_dl_confidence"],
+            ),
         )
         table_data.append(
             [Paragraph(escape(str(value)), normal) for value in values]
@@ -112,7 +129,7 @@ def _create_pdf(events: Sequence[sqlite3.Row]) -> bytes:
 
     table = Table(
         table_data,
-        colWidths=(92, 82, 300, 45, 98, 120),
+        colWidths=(82, 72, 250, 42, 84, 105, 105),
         repeatRows=1,
     )
     table.setStyle(
@@ -133,7 +150,12 @@ def _create_pdf(events: Sequence[sqlite3.Row]) -> bytes:
     document.build(
         [
             Paragraph("Smart Web Shield (sws) — Web Güvenlik Raporu", title),
-            Paragraph("Son 50 kayıt. AI sonuçları yalnızca yapılandırılmış model varsa gösterilir.", normal),
+            Paragraph(
+                "Son 50 kayıt. AI sonuçları danışma katmanıdır (Advisory Layer); "
+                "nihai karar kural motorunundur. Güven yüzdesi model tahminini "
+                "ifade eder, güvenlik garantisi değildir.",
+                normal,
+            ),
             Spacer(1, 12),
             table,
         ]
@@ -151,12 +173,16 @@ def _load_model_metrics(path: str | Path) -> dict[str, dict[str, float]]:
         raise ValueError("The model metrics file must contain a JSON object.")
 
     required_metrics = ("accuracy", "precision", "recall", "f1")
+    optional_metrics = ("false_positive_rate",)
     validated: dict[str, dict[str, float]] = {}
     for model_name, scores in metrics.items():
         if not isinstance(model_name, str) or not isinstance(scores, dict):
             raise ValueError("Each model metric entry must be a named JSON object.")
         validated_scores: dict[str, float] = {}
-        for metric in required_metrics:
+        metrics_to_validate = required_metrics + tuple(
+            metric for metric in optional_metrics if metric in scores
+        )
+        for metric in metrics_to_validate:
             value = scores.get(metric)
             if (
                 isinstance(value, bool)
@@ -199,6 +225,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     )
     if test_config:
         app.config.update(test_config)
+    app.jinja_env.filters["ai_assessment"] = _format_ai_assessment
     if app.config.get("TESTING"):
         app.config.setdefault("CSRF_ENABLED", False)
     initialize(app.config["DATABASE"])

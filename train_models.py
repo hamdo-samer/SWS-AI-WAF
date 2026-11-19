@@ -18,6 +18,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
+    confusion_matrix,
     f1_score,
     precision_score,
     recall_score,
@@ -31,6 +32,22 @@ PROJECT_ROOT = Path(__file__).parent
 DEFAULT_DATASET = PROJECT_ROOT / "data" / "csic_database.csv"
 DEFAULT_MODEL_DIRECTORY = PROJECT_ROOT / "models"
 RANDOM_STATE = 42
+_NORMAL_REQUEST_REPETITIONS = 64
+_NORMAL_REQUESTS = (
+    ("GET", "/"),
+    ("GET", "/index.html"),
+    ("GET", "/hakkimizda.html"),
+    ("GET", "/hizmetler.html"),
+    ("GET", "/iletisim.html"),
+    ("GET", "/css/style.css"),
+    ("GET", "/img/logo.jpg"),
+    ("GET", "/img/hero-bg.jpg"),
+    ("GET", "/img/mutfak.jpg"),
+    ("POST", "/iletisim.html"),
+    ("POST", "/contact"),
+    ("POST", "/api/contact"),
+    ("POST", "/iletisim.html?subject=mutfak"),
+)
 
 
 def load_dataset(path: str | Path = DEFAULT_DATASET) -> tuple[list[str], np.ndarray]:
@@ -86,11 +103,21 @@ def load_dataset(path: str | Path = DEFAULT_DATASET) -> tuple[list[str], np.ndar
 
 
 def _calculate_metrics(labels: np.ndarray, predictions: np.ndarray) -> dict[str, Any]:
+    true_negative, false_positive, _, _ = confusion_matrix(
+        labels,
+        predictions,
+        labels=(0, 1),
+    ).ravel()
     return {
         "accuracy": float(accuracy_score(labels, predictions)),
         "precision": float(precision_score(labels, predictions, zero_division=0)),
         "recall": float(recall_score(labels, predictions, zero_division=0)),
         "f1": float(f1_score(labels, predictions, zero_division=0)),
+        "false_positive_rate": float(
+            false_positive / (false_positive + true_negative)
+            if false_positive + true_negative
+            else 0
+        ),
         "classification_report": classification_report(
             labels,
             predictions,
@@ -129,6 +156,26 @@ def _deduplicate_requests(
             "conflicting labels are excluded."
         )
     return unique_texts, np.asarray(unique_labels, dtype=np.int32), len(conflicting_texts)
+
+
+def _augment_training_with_normal_requests(
+    training_texts: list[str],
+    training_labels: np.ndarray,
+    heldout_texts: list[str],
+) -> tuple[list[str], np.ndarray, int]:
+    heldout = set(heldout_texts)
+    normal_texts = []
+    for method, url in _NORMAL_REQUESTS:
+        text = format_request_text(method, url)
+        if text not in heldout:
+            normal_texts.append(text)
+    repeated_texts = normal_texts * _NORMAL_REQUEST_REPETITIONS
+    repeated_labels = np.zeros(len(repeated_texts), dtype=np.int32)
+    return (
+        [*training_texts, *repeated_texts],
+        np.concatenate((training_labels, repeated_labels)),
+        len(normal_texts),
+    )
 
 
 def _tensorflow() -> Any:
@@ -193,7 +240,6 @@ def train_models(
         random_state=RANDOM_STATE,
         stratify=labels,
     )
-
     x_cnn_train, x_cnn_validation, y_cnn_train, y_cnn_validation = train_test_split(
         x_train,
         y_train,
@@ -201,6 +247,21 @@ def train_models(
         random_state=RANDOM_STATE,
         stratify=y_train,
     )
+    x_train, y_train, synthetic_normal_patterns = _augment_training_with_normal_requests(
+        x_train,
+        y_train,
+        x_test,
+    )
+    x_cnn_train, y_cnn_train, cnn_synthetic_normal_patterns = (
+        _augment_training_with_normal_requests(
+            x_cnn_train,
+            y_cnn_train,
+            x_test,
+        )
+    )
+    if cnn_synthetic_normal_patterns != synthetic_normal_patterns:
+        raise RuntimeError("RF and CNN training data received different normal examples.")
+
     vectorizer = TfidfVectorizer(
         analyzer="char",
         ngram_range=(2, 4),
@@ -274,11 +335,15 @@ def train_models(
     cnn_predictions = (cnn_probabilities >= 0.5).astype(np.int32)
     metrics["1D-CNN"] = _calculate_metrics(y_test, cnn_predictions)
     evaluation_metadata = {
-        "split_strategy": "deduplicated_request_stratified_holdout",
+        "split_strategy": "deduplicated_request_stratified_holdout_with_train_only_normal_augmentation",
         "input_rows": len(loaded_texts),
         "unique_requests": len(texts),
         "conflicting_request_groups_excluded": conflicting_request_count,
         "test_unique_requests": len(y_test),
+        "synthetic_normal_training_patterns": synthetic_normal_patterns,
+        "synthetic_normal_training_examples": (
+            synthetic_normal_patterns * _NORMAL_REQUEST_REPETITIONS
+        ),
     }
     for scores in metrics.values():
         scores["evaluation"] = evaluation_metadata
@@ -294,7 +359,9 @@ def train_models(
     )
 
     print(
-        f"Loaded {len(loaded_texts)} rows; trained on {len(texts)} unique requests "
+        f"Loaded {len(loaded_texts)} rows; trained RF on {len(y_train)} examples "
+        f"including {synthetic_normal_patterns * _NORMAL_REQUEST_REPETITIONS} "
+        f"synthetic normal examples and CNN on {len(y_cnn_train)} examples "
         f"from {dataset_path}."
     )
     for model_name, scores in metrics.items():

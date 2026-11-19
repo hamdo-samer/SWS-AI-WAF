@@ -45,6 +45,7 @@
           <th>Precision</th>
           <th>Recall</th>
           <th>F1</th>
+          <th>FPR</th>
         </tr>
       </thead>
       <tbody>
@@ -55,14 +56,15 @@
           <td>{{ '%.1f'|format(scores['precision'] * 100) }}%</td>
           <td>{{ '%.1f'|format(scores['recall'] * 100) }}%</td>
           <td>{{ '%.1f'|format(scores['f1'] * 100) }}%</td>
+          <td>{% if 'false_positive_rate' in scores %}{{ '%.1f'|format(scores['false_positive_rate'] * 100) }}%{% else %}—{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
   <p class="model-note">
-    Ölçümler, ayrılmış test paketinden kaydedilir ve uygulama süreci sırasında
-    doğrudan alınmaz.
+    Ölçümler ayrılmış test kümesinden alınmıştır. FPR, normal isteklerin yanlış
+    biçimde anomali olarak tahmin edilme oranıdır.
   </p>
 </section>
 {% endif %}

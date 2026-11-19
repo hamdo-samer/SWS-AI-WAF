@@ -5,10 +5,46 @@ from pathlib import Path
 
 import numpy as np
 
-from train_models import _deduplicate_requests, load_dataset
+from request_features import format_request_text
+from train_models import (
+    _NORMAL_REQUEST_REPETITIONS,
+    _NORMAL_REQUESTS,
+    _calculate_metrics,
+    _augment_training_with_normal_requests,
+    _deduplicate_requests,
+    load_dataset,
+)
 
 
 class TrainingDataTests(unittest.TestCase):
+    def test_metrics_include_false_positive_rate(self):
+        metrics = _calculate_metrics(
+            np.asarray([0, 0, 1, 1], dtype=np.int32),
+            np.asarray([0, 1, 1, 1], dtype=np.int32),
+        )
+
+        self.assertEqual(metrics["false_positive_rate"], 0.5)
+
+    def test_normal_examples_are_repeated_in_training_only(self):
+        heldout = [format_request_text("GET", "/index.html")]
+        texts, labels, included_patterns = _augment_training_with_normal_requests(
+            ["Method: GET\nURL: /products"],
+            np.asarray([0], dtype=np.int32),
+            heldout,
+        )
+
+        self.assertEqual(included_patterns, len(_NORMAL_REQUESTS) - 1)
+        self.assertEqual(
+            len(texts) - 1,
+            included_patterns * _NORMAL_REQUEST_REPETITIONS,
+        )
+        self.assertEqual(labels.tolist().count(0), len(texts))
+        self.assertNotIn(heldout[0], texts)
+        self.assertEqual(
+            texts.count(format_request_text("POST", "/iletisim.html")),
+            _NORMAL_REQUEST_REPETITIONS,
+        )
+
     def test_duplicate_requests_are_deduplicated_and_conflicting_labels_excluded(self):
         texts, labels, conflicting_count = _deduplicate_requests(
             ["same", "same", "normal", "attack"],

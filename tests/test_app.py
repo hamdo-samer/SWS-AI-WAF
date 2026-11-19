@@ -7,11 +7,46 @@ from pathlib import Path
 from unittest.mock import patch
 
 from ai_engine import AIPrediction
-from app import create_app
+from app import _format_ai_assessment, create_app
 from storage import add_event, recent_events
 
 
 class AppFlowTests(unittest.TestCase):
+    def test_ai_assessments_show_normalized_labels_and_confidence(self):
+        self.assertEqual(_format_ai_assessment("Engellendi", 0.92), "Anomali (%92)")
+        self.assertEqual(_format_ai_assessment("İzin verildi", 0.98), "Normal (%98)")
+        self.assertEqual(_format_ai_assessment(None, None), "—")
+
+    def test_logs_show_advisory_confidence_and_spaced_request_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = create_app({
+                "TESTING": True,
+                "DATABASE": str(Path(directory) / "test.sqlite3"),
+            })
+            add_event(
+                app.config["DATABASE"],
+                {
+                    "source": "Yerel",
+                    "method": "GET",
+                    "path": "/index.html",
+                    "score": 0,
+                    "decision": "İzin verildi",
+                    "reasons": ("Test",),
+                    "ai_rf_result": "Engellendi",
+                    "ai_rf_confidence": 0.92,
+                    "ai_dl_result": "İzin verildi",
+                    "ai_dl_confidence": 0.98,
+                },
+            )
+
+            response = app.test_client().get("/gunluk")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertIn(b"Anomali (%92)", response.data)
+            self.assertIn(b"Normal (%98)", response.data)
+            self.assertIn(b"GET /index.html", response.data)
+            self.assertIn(b"Advisory Layer", response.data)
+
     def test_inspection_is_logged_and_dashboard_updates(self):
         with tempfile.TemporaryDirectory() as directory:
             app = create_app({
@@ -45,6 +80,7 @@ class AppFlowTests(unittest.TestCase):
                         "precision": 0.8,
                         "recall": 0.7,
                         "f1": 0.75,
+                        "false_positive_rate": 0.2,
                     }
                 }),
                 encoding="utf-8",
@@ -60,6 +96,7 @@ class AppFlowTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertIn(b"Random Forest", response.data)
             self.assertIn(b"90.0%", response.data)
+            self.assertIn(b"20.0%", response.data)
 
     def test_local_scenario_inspects_payload_without_sending_or_executing_it(self):
         with tempfile.TemporaryDirectory() as directory:

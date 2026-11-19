@@ -52,6 +52,13 @@ danışma amaçlıdır; model çalışmazsa hata günlüğe kaydedilir ve karar 
 kalır. `app.py` ile `proxy_app.py` varsayılan olarak aynı portu (5000) kullandığından,
 ikisini aynı anda çalıştırmak için port yapılandırmasını ayrıca değiştirmek gerekir.
 
+`my_website/` klasörü, canlı Proxy demosunda hedef web uygulaması (Target Web
+Application) olarak kullanılmak üzere eklenen statik Deniz Dekorasyon sitesidir.
+Bu siteyi korumak için upstream hizmeti olarak sunun ve Proxy'yi başlatmadan önce
+`BACKEND_URL` değerini bu hizmetin adresine ayarlayın.
+Docker Compose varsayılan olarak Nginx kullanır ve `my_website/` klasörünü
+otomatik olarak backend'e bağlamaz.
+
 ## Sayfalar
 
 - `/` — isteği manuel inceleme
@@ -84,7 +91,13 @@ python train_models.py
 
 Eğitim ve uygulama aynı `Method` ve normalize edilmiş `URL` metnini kullanır;
 CSIC mutlak adresleri modelleme öncesi istek yoluna dönüştürülür.
-Bu özellikler değişirse modelleri yeniden eğitin. Eğitim
+Normal web yolları (`/`, `/index.html`, `/hakkimizda.html`, CSS ve görsel yolları)
+ile olağan POST yöntem-yol çiftleri eğitim bölümüne eşit olarak 64 kez eklenir.
+Bu sentetik örnekler train/test bölünmesinden sonra yalnızca eğitim verisine
+eklenir; test kümesindeki tam eşleşmeler eğitime alınmaz. Model girdisi `Method`
+ve normalize edilmiş `URL` alanlarıyla sınırlıdır; POST gövdesi modele dahil
+edilmez. `metrics.json`, diğer ölçütlerle birlikte yanlış pozitif oranını (FPR)
+raporlar. Bu özellikler değişirse modelleri yeniden eğitin. Eğitim
 `models/random_forest.joblib`, `models/vectorizer.joblib`,
 `models/1d_cnn.keras` ve elde tutulan test bölümü için `models/metrics.json`
 üretir. Modellerin karşılaştırması kontrol panelinde görünür. Ana uygulama

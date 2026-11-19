@@ -28,8 +28,8 @@
           >
         </td>
         <td class="reason">{{ event['reasons'] }}</td>
-        <td>{{ event['ai_rf_result'] or '—' }}{% if event['ai_rf_confidence'] is not none %} ({{ '%.0f'|format(event['ai_rf_confidence'] * 100) }}%){% endif %}</td>
-        <td>{{ event['ai_dl_result'] or '—' }}{% if event['ai_dl_confidence'] is not none %} ({{ '%.0f'|format(event['ai_dl_confidence'] * 100) }}%){% endif %}</td>
+        <td>{{ event['ai_rf_result']|ai_assessment(event['ai_rf_confidence']) }}</td>
+        <td>{{ event['ai_dl_result']|ai_assessment(event['ai_dl_confidence']) }}</td>
         <td>{{ event['attack_type'] or '—' }}</td>
       </tr>
       {% endfor %}
