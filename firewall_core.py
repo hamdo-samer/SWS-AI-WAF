@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import re
+import base64
+import binascii
+import html
+import unicodedata
 from dataclasses import dataclass
 from urllib.parse import unquote, unquote_plus
 
@@ -42,13 +46,50 @@ _MAX_BODY_LENGTH = 1024 * 1024
 
 
 def _decode_for_inspection(value: str, *, plus_as_space: bool = False) -> str:
-    decoded = unquote_plus(value) if plus_as_space else unquote(value)
+    normalized = unicodedata.normalize("NFKC", html.unescape(value))
+    decoded = unquote_plus(normalized) if plus_as_space else unquote(normalized)
     for _ in range(4):
         next_value = unquote(decoded)
         if next_value == decoded:
             break
         decoded = next_value
-    return decoded
+    return unicodedata.normalize("NFKC", decoded)
+
+
+def _base64_variants(value: str) -> tuple[str, ...]:
+    candidates: list[str] = []
+    for token in re.findall(r"(?<![A-Za-z0-9+/])[A-Za-z0-9+/]{8,}={0,2}", value):
+        padded = token + ("=" * ((-len(token)) % 4))
+        try:
+            raw = base64.b64decode(padded, validate=True)
+            decoded = raw.decode("utf-8", errors="ignore")
+        except (binascii.Error, UnicodeDecodeError):
+            continue
+        if decoded:
+            candidates.append(unicodedata.normalize("NFKC", decoded))
+    return tuple(dict.fromkeys(candidates))
+
+
+def sanitize_for_log(value: str) -> str:
+    if not isinstance(value, str):
+        return ""
+    text = unicodedata.normalize("NFKC", value)
+    text = re.sub(
+        r"(?i)\b(password|passwd|pwd|secret|token|api[_-]?key|authorization)\b\s*[=:]\s*[^\s&,]+",
+        r"\1=[REDACTED]",
+        text,
+    )
+    text = re.sub(
+        r"(?i)([?&](?:password|passwd|pwd|secret|token|api[_-]?key)=[^&#\s]*)",
+        "[REDACTED]",
+        text,
+    )
+    text = re.sub(
+        r"(?i)\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+",
+        r"\1 [REDACTED]",
+        text,
+    )
+    return text[:4096]
 
 
 def inspect_request(
@@ -78,6 +119,10 @@ def inspect_request(
     )
     normalized_body = _decode_for_inspection(body, plus_as_space=is_form_body)
     combined = f"{normalized_path}\n{normalized_query}\n{normalized_body}"
+    combined_variants = [combined]
+    for part in (normalized_path, normalized_query, normalized_body):
+        combined_variants.extend(_base64_variants(part))
+    combined = "\n".join(combined_variants)
 
     if not path.strip().startswith("/"):
         score += 15

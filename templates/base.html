@@ -25,6 +25,14 @@
         <a href="{{ url_for('logs') }}">Kayıtlar</a>
         <a href="{{ url_for('simulation_page') }}">Yerel senaryolar</a>
         <a href="{{ url_for('about') }}">Proje hakkında</a>
+        {% if session.get('admin_authenticated') %}
+        <form method="post" action="{{ url_for('logout') }}" style="display:inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+          <button type="submit" class="button">Çıkış</button>
+        </form>
+        {% else %}
+        <a href="{{ url_for('login') }}">Yönetici girişi</a>
+        {% endif %}
       </nav>
       <span class="status"><i></i> Yerel demo</span>
     </header>

@@ -34,6 +34,7 @@
   <div class="panel-card form-card">
     <div class="section-head"><div><p class="eyebrow">MANUEL TEST</p><h2>İstek bilgileri</h2></div><span class="step">01 / 02</span></div>
     <form method="post" action="{{ url_for('inspect') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
       <label for="path">İstek yolu</label>
       <input id="path" name="path" maxlength="4096" required placeholder="/urunler" value="{{ request.form.get('path', '') }}">
       <div class="form-row">

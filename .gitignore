@@ -5,3 +5,4 @@ instance/
 models/*.joblib
 models/*.keras
 models/metrics.json
+.env

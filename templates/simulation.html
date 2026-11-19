@@ -14,6 +14,7 @@
     <div><p class="eyebrow">GÜVENLİ DEMO</p><h2>Örnek vektör</h2></div>
   </div>
   <form method="post" action="{{ url_for('send_simulated_scenario') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
     <label for="attack_type">Saldırı türü</label>
     <select id="attack_type" name="attack_type">
       {% for key, label in scenarios.items() %}

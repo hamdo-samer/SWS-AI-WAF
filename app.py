@@ -11,10 +11,22 @@ from io import BytesIO, StringIO
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-from flask import Flask, Response, abort, jsonify, redirect, render_template, request, url_for
+from flask import (
+    Flask,
+    Response,
+    abort,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
+from werkzeug.security import check_password_hash
 
 from ai_engine import AIDetector
-from firewall_core import inspect_request
+from config import Settings
+from firewall_core import inspect_request, sanitize_for_log
 from storage import add_event, initialize, recent_events, statistics
 
 
@@ -161,18 +173,34 @@ def _load_model_metrics(path: str | Path) -> dict[str, dict[str, float]]:
 
 def create_app(test_config: dict | None = None) -> Flask:
     app = Flask(__name__)
+    settings = Settings.from_env()
     app.config.from_mapping(
+        SECRET_KEY=settings.secret_key,
         DATABASE=os.environ.get(
             "FIREWALL_DATABASE",
-            str(Path(app.root_path) / "instance" / "firewall.sqlite3"),
+            settings.database_url,
         ),
         AI_MODEL_PATH=str(Path(app.root_path) / "models" / "random_forest.joblib"),
         AI_VECTORIZER_PATH=str(Path(app.root_path) / "models" / "vectorizer.joblib"),
         AI_CNN_MODEL_PATH=str(Path(app.root_path) / "models" / "1d_cnn.keras"),
         AI_METRICS_PATH=str(Path(app.root_path) / "models" / "metrics.json"),
+        ADMIN_USERNAME=settings.admin_username,
+        ADMIN_PASSWORD=settings.admin_password,
+        ADMIN_PASSWORD_HASH=settings.admin_password_hash,
+        CSRF_ENABLED=settings.csrf_enabled,
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_SECURE=os.getenv("COOKIE_SECURE", "false").lower()
+        in {"1", "true", "yes", "on"},
+        PERMANENT_SESSION_LIFETIME=1800,
+        DASHBOARD_HOST=settings.dashboard_host,
+        DASHBOARD_PORT=settings.dashboard_port,
+        TRUSTED_PROXY_CIDRS=settings.trusted_proxy_cidrs,
     )
     if test_config:
         app.config.update(test_config)
+    if app.config.get("TESTING"):
+        app.config.setdefault("CSRF_ENABLED", False)
     initialize(app.config["DATABASE"])
     ai_detector = AIDetector(
         app.config["AI_MODEL_PATH"],
@@ -180,6 +208,126 @@ def create_app(test_config: dict | None = None) -> Flask:
         app.config["AI_CNN_MODEL_PATH"],
     )
     app.extensions["ai_detector"] = ai_detector
+
+    def _csrf_token() -> str:
+        token = session.get("csrf_token")
+        if not token:
+            token = os.urandom(32).hex()
+            session["csrf_token"] = token
+        return token
+
+    def _credentials_configured() -> bool:
+        return bool(
+            app.config.get("ADMIN_PASSWORD")
+            or app.config.get("ADMIN_PASSWORD_HASH")
+        )
+
+    def _password_matches(password: str) -> bool:
+        password_hash = app.config.get("ADMIN_PASSWORD_HASH")
+        if password_hash:
+            return check_password_hash(password_hash, password)
+        configured_password = app.config.get("ADMIN_PASSWORD")
+        if configured_password:
+            return secrets_compare(configured_password, password)
+        if app.config.get("TESTING"):
+            return secrets_compare("admin", password)
+        return False
+
+    def secrets_compare(expected: str, supplied: str) -> bool:
+        from hmac import compare_digest
+
+        return compare_digest(expected, supplied)
+
+    @app.context_processor
+    def template_security_context():
+        return {"csrf_token": _csrf_token()}
+
+    @app.after_request
+    def security_headers(response: Response) -> Response:
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault(
+            "Permissions-Policy",
+            "camera=(), microphone=(), geolocation=()",
+        )
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; img-src 'self' data:; "
+            "style-src 'self'; script-src 'self'; frame-ancestors 'none'",
+        )
+        response.headers.setdefault(
+            "Cache-Control",
+            "no-store, max-age=0",
+        )
+        return response
+
+    @app.before_request
+    def protect_admin_routes():
+        if app.config.get("TESTING"):
+            return None
+        protected_prefixes = (
+            "/panel",
+            "/gunluk",
+            "/api/ozet",
+            "/export/",
+        )
+        if request.method == "POST" and app.config.get("CSRF_ENABLED"):
+            if request.endpoint != "login":
+                submitted = request.form.get("csrf_token") or request.headers.get(
+                    "X-CSRF-Token", ""
+                )
+                if not submitted or not secrets_compare(
+                    session.get("csrf_token", ""),
+                    submitted,
+                ):
+                    abort(403, description="Geçersiz veya eksik CSRF belirteci.")
+
+        if any(request.path == prefix or request.path.startswith(prefix)
+               for prefix in protected_prefixes):
+            if not session.get("admin_authenticated"):
+                return redirect(url_for("login", next=request.full_path.rstrip("?")))
+
+    @app.get("/giris")
+    def login():
+        if session.get("admin_authenticated"):
+            return redirect(url_for("dashboard"))
+        if not _credentials_configured() and not app.config.get("TESTING"):
+            return (
+                render_template(
+                    "login.html",
+                    login_error="ADMIN_PASSWORD veya ADMIN_PASSWORD_HASH ortam değişkeni ayarlanmalıdır.",
+                ),
+                503,
+            )
+        return render_template("login.html")
+
+    @app.post("/giris")
+    def login_submit():
+        if not _credentials_configured() and not app.config.get("TESTING"):
+            abort(503, description="Yönetici kimlik bilgileri yapılandırılmamış.")
+        username = request.form.get("username", "")
+        password = request.form.get("password", "")
+        if (
+            secrets_compare(app.config["ADMIN_USERNAME"], username)
+            and _password_matches(password)
+        ):
+            session.clear()
+            session["admin_authenticated"] = True
+            session.permanent = True
+            next_url = request.args.get("next", "")
+            if next_url.startswith("/"):
+                return redirect(next_url)
+            return redirect(url_for("dashboard"))
+        return render_template(
+            "login.html",
+            login_error="Kullanıcı adı veya parola hatalı.",
+        ), 401
+
+    @app.post("/cikis")
+    def logout():
+        session.clear()
+        return redirect(url_for("login"))
 
     @app.get("/")
     def index():
@@ -212,9 +360,9 @@ def create_app(test_config: dict | None = None) -> Flask:
             else None
         )
         event = {
-            "source": request.remote_addr or "Yerel",
+            "source": sanitize_for_log(request.remote_addr or "Yerel"),
             "method": method,
-            "path": path,
+            "path": sanitize_for_log(path),
             "score": result.score,
             "decision": result.decision,
             "reasons": result.reasons,
@@ -262,7 +410,7 @@ def create_app(test_config: dict | None = None) -> Flask:
             {
                 "source": "Yerel simülasyon",
                 "method": "GET",
-                "path": logged_path,
+                "path": sanitize_for_log(logged_path),
                 "score": result.score,
                 "decision": result.decision,
                 "reasons": (
@@ -367,4 +515,8 @@ app = create_app()
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    app.run(
+        host=app.config["DASHBOARD_HOST"],
+        port=app.config["DASHBOARD_PORT"],
+        debug=False,
+    )

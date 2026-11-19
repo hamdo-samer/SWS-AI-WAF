@@ -19,6 +19,32 @@ python app.py
 
 Tarayıcıda `http://127.0.0.1:5000` adresini açın. İstek inceleme formuna yol, yöntem ve isteğe bağlı metaveri girin. Sonuçlar `instance\firewall.sqlite3` içinde tutulur.
 
+## Üretim yapılandırması
+
+Kopyayı oluşturun:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Şunları ayarlayın:
+
+- `SECRET_KEY`: uzun rastgele bir oturum imzalama anahtarı.
+- `ADMIN_USERNAME` ve `ADMIN_PASSWORD_HASH`: Flask/Werkzeug ile üretilen yönetici parola hash'i.
+- `DASHBOARD_PORT`: varsayılan 5000.
+- `PROXY_PORT`: varsayılan 8081.
+- `BACKEND_URL`: Proxy'nin yönlendireceği backend adresi.
+- `DATABASE_URL`: SQLite yolu veya `postgresql://...` bağlantı adresi.
+- `TRUSTED_PROXY_CIDRS`: `X-Forwarded-For` tespitine izin verilen yalnızca güvenilir proxy ağları.
+
+Parola hash'i üretmek için:
+
+```powershell
+python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash(input('Yeni parola: ')))"
+```
+
+Dashboard rotaları oturum tabanlı girişle korunur; `/panel`, `/gunluk`, `/api/ozet` ve export rotaları için giriş gerekir.
+
 Canlı proxy demosu için, `http://127.0.0.1:8080` adresinde erişilebilir bir upstream
 site varken `python proxy_app.py` çalıştırın. Proxy, upstream'e iletmeden önce yol,
 sorgu ve en fazla 1 MiB'lık istek gövdesini kural motoruyla inceler. AI tahmini
@@ -67,3 +93,16 @@ dosyalarını yalnızca güvendiğiniz kaynaktan yükleyin: joblib dosyaları Py
 kodu çalıştırabilir. Modeller eğitilmemişse uygulama AI çıktısı uydurmaz.
 
 Bu bir eğitim demosudur; ağ trafiğini yönlendirmez, gerçek sitelere istek göndermez ve üretim ortamında kullanılan bir web uygulaması güvenlik duvarının yerine geçmez. Canlıya almadan önce kimlik doğrulama, CSRF koruması, TLS, güvenlik testleri ve uzman incelemesi eklenmelidir.
+
+## Docker ile çalıştırma
+
+Önce `.env.example` dosyasını `.env` olarak kopyalayın ve yerel gizli anahtarları düzenleyin:
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build
+```
+
+- Dashboard: `http://127.0.0.1:5000`
+- Proxy: `http://127.0.0.1:8081`
+- Örnek backend: Docker Compose içindeki `backend` servisi
