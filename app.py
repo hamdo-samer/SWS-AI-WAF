@@ -304,12 +304,12 @@ def create_app(test_config: dict | None = None) -> Flask:
     def protect_admin_routes():
         if app.config.get("TESTING"):
             return None
-        protected_prefixes = (
-            "/panel",
-            "/gunluk",
-            "/api/ozet",
-            "/export/",
-        )
+
+        public_endpoints = {"static", "login", "login_submit", "health"}
+        if request.endpoint and request.endpoint not in public_endpoints:
+            if not session.get("admin_authenticated"):
+                return redirect(url_for("login", next=request.full_path.rstrip("?")))
+
         if request.method == "POST" and app.config.get("CSRF_ENABLED"):
             if request.endpoint != "login":
                 submitted = request.form.get("csrf_token") or request.headers.get(
@@ -320,11 +320,6 @@ def create_app(test_config: dict | None = None) -> Flask:
                     submitted,
                 ):
                     abort(403, description="Geçersiz veya eksik CSRF belirteci.")
-
-        if any(request.path == prefix or request.path.startswith(prefix)
-               for prefix in protected_prefixes):
-            if not session.get("admin_authenticated"):
-                return redirect(url_for("login", next=request.full_path.rstrip("?")))
 
     @app.get("/giris")
     def login():
@@ -338,7 +333,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                 ),
                 503,
             )
-        return render_template("login.html")
+        return render_template("login.html", next_url=request.args.get("next", ""))
 
     @app.post("/giris")
     def login_submit():

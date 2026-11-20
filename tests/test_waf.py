@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import re
 from pathlib import Path
 
 from app import create_app
@@ -42,15 +43,82 @@ class ProductionHardeningTests(unittest.TestCase):
         )
 
     def test_dashboard_requires_authentication(self):
-        response = self.client.get("/panel")
-        self.assertEqual(response.status_code, 302)
-        self.assertIn("/giris", response.headers["Location"])
+        protected_pages = (
+            "/",
+            "/panel",
+            "/gunluk",
+            "/hakkinda",
+            "/simulasyon",
+            "/api/ozet",
+            "/export/csv",
+            "/export/pdf",
+        )
+        for path in protected_pages:
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 302)
+                self.assertIn("/giris", response.headers["Location"])
+
+        for path, data in (
+            ("/incele", {"path": "/", "method": "GET"}),
+            ("/simulasyon/gonder", {"attack_type": "sqli"}),
+            ("/cikis", {}),
+        ):
+            with self.subTest(path=path):
+                response = self.client.post(path, data=data)
+                self.assertEqual(response.status_code, 302)
+                self.assertIn("/giris", response.headers["Location"])
+
+        login_page = self.client.get("/giris")
+        self.assertEqual(login_page.status_code, 200)
+        self.assertNotIn(b"Kontrol paneli", login_page.data)
+        self.assertIn(b"Y\xc3\xb6netici giri\xc5\x9fi", login_page.data)
+        self.assertEqual(self.client.get("/saglik").status_code, 200)
+        static_response = self.client.get("/static/style.css")
+        self.assertEqual(static_response.status_code, 200)
+        static_response.close()
 
     def test_login_and_dashboard_access(self):
-        response = self.login()
+        protected_response = self.client.get("/hakkinda?from=menu")
+        self.assertEqual(protected_response.status_code, 302)
+        login_page = self.client.get(protected_response.headers["Location"])
+        self.assertEqual(login_page.status_code, 200)
+
+        form_action = re.search(
+            r'<form method="post" action="([^"]+)"',
+            login_page.get_data(as_text=True),
+        ).group(1)
+        with self.client.session_transaction() as session:
+            csrf_token = session["csrf_token"]
+        response = self.client.post(
+            form_action,
+            data={
+                "username": "admin",
+                "password": "Strong-Test-Password",
+                "csrf_token": csrf_token,
+            },
+        )
         self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["Location"], "/hakkinda?from=menu")
+
+        protected_pages = (
+            "/",
+            "/panel",
+            "/gunluk",
+            "/hakkinda",
+            "/simulasyon",
+            "/api/ozet",
+            "/export/csv",
+            "/export/pdf",
+        )
+        for path in protected_pages:
+            with self.subTest(path=path):
+                page = self.client.get(path)
+                self.assertEqual(page.status_code, 200)
+
         dashboard = self.client.get("/panel")
-        self.assertEqual(dashboard.status_code, 200)
+        self.assertIn(b"Kontrol paneli", dashboard.data)
+        self.assertIn(b"\xc3\x87\xc4\xb1k\xc4\xb1\xc5\x9f", dashboard.data)
 
     def test_security_headers_are_added(self):
         response = self.client.get("/")
@@ -58,6 +126,7 @@ class ProductionHardeningTests(unittest.TestCase):
         self.assertIn("frame-ancestors 'none'", response.headers["Content-Security-Policy"])
 
     def test_clean_request_is_allowed(self):
+        self.login()
         token = self._csrf_token("/")
         response = self.client.post(
             "/incele",
@@ -73,6 +142,7 @@ class ProductionHardeningTests(unittest.TestCase):
         self.assertIn("İzin verildi".encode(), response.data)
 
     def test_sqli_is_blocked(self):
+        self.login()
         token = self._csrf_token("/")
         response = self.client.post(
             "/incele",
@@ -88,6 +158,7 @@ class ProductionHardeningTests(unittest.TestCase):
         self.assertIn("Engellendi".encode(), response.data)
 
     def test_xss_is_blocked_after_normalization(self):
+        self.login()
         token = self._csrf_token("/")
         response = self.client.post(
             "/incele",

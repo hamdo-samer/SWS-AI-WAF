@@ -46,7 +46,7 @@ python -c "from werkzeug.security import generate_password_hash; print(generate_
 Hash değerini `.env` içine yazarken tek tırnakla çevreleyin. Hash içindeki `$`
 karakterleri Docker Compose tarafından değişken olarak yorumlanmamalıdır.
 
-Dashboard rotaları oturum tabanlı girişle korunur; `/panel`, `/gunluk`, `/api/ozet` ve export rotaları için giriş gerekir.
+SWS arayüzünün tüm sayfaları ve işlevleri oturum tabanlı giriş gerektirir. Giriş yapmadan yalnızca `/giris`, `/saglik` ve statik arayüz dosyaları açılabilir.
 
 Canlı proxy demosu için, `http://127.0.0.1:8080` adresinde erişilebilir bir upstream
 site varken `python proxy_app.py` çalıştırın. Proxy, upstream'e iletmeden önce yol,
