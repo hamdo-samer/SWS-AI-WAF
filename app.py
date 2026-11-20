@@ -236,6 +236,17 @@ def create_app(test_config: dict | None = None) -> Flask:
     )
     app.extensions["ai_detector"] = ai_detector
 
+    def _predict_ai(method: str, path: str, query: str = ""):
+        if not ai_detector.is_available:
+            return None
+        try:
+            return ai_detector.predict(method, path, query)
+        except Exception:
+            app.logger.exception(
+                "AI advisory inference failed; continuing with the rule-engine decision."
+            )
+            return None
+
     def _csrf_token() -> str:
         token = session.get("csrf_token")
         if not token:
@@ -343,7 +354,11 @@ def create_app(test_config: dict | None = None) -> Flask:
             session["admin_authenticated"] = True
             session.permanent = True
             next_url = request.args.get("next", "")
-            if next_url.startswith("/"):
+            if (
+                next_url.startswith("/")
+                and not next_url.startswith("//")
+                and "\\" not in next_url
+            ):
                 return redirect(next_url)
             return redirect(url_for("dashboard"))
         return render_template(
@@ -381,11 +396,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         except (TypeError, ValueError) as error:
             abort(400, description=str(error))
 
-        ai_prediction = (
-            ai_detector.predict(method, path, query)
-            if ai_detector.is_available
-            else None
-        )
+        ai_prediction = _predict_ai(method, path, query)
         event = {
             "source": sanitize_for_log(request.remote_addr or "Yerel"),
             "method": method,
@@ -426,11 +437,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         path, query = _SIMULATION_PAYLOADS[scenario]
         user_agent = "swsLocalSimulation/1.0"
         result = inspect_request(path, "GET", query, user_agent)
-        ai_prediction = (
-            ai_detector.predict("GET", path, query)
-            if ai_detector.is_available
-            else None
-        )
+        ai_prediction = _predict_ai("GET", path, query)
         logged_path = path + ("&" if "?" in path else "?") + query
         add_event(
             app.config["DATABASE"],

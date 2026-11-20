@@ -68,6 +68,38 @@ class AIDetectorTests(unittest.TestCase):
                 ["Method: GET\nURL: /products?category=books"],
             )
 
+    def test_random_forest_remains_available_when_tensorflow_is_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            model_path = Path(directory) / "random_forest.joblib"
+            vectorizer_path = Path(directory) / "vectorizer.joblib"
+            cnn_path = Path(directory) / "1d_cnn.keras"
+            for path in (model_path, vectorizer_path, cnn_path):
+                path.touch()
+            model = _TestClassifier()
+            vectorizer = _TestVectorizer()
+
+            def import_module(name):
+                if name == "joblib":
+                    return SimpleNamespace(
+                        load=lambda path: model if Path(path) == model_path else vectorizer
+                    )
+                if name == "tensorflow":
+                    raise ImportError("TensorFlow is not installed")
+                raise AssertionError(f"Unexpected optional dependency: {name}")
+
+            with self.assertLogs("ai_engine", level="WARNING") as logged:
+                with patch("ai_engine.importlib.import_module", side_effect=import_module):
+                    detector = AIDetector(model_path, vectorizer_path, cnn_path)
+
+            prediction = detector.predict("GET", "/products")
+
+            self.assertTrue(detector.rf_available)
+            self.assertFalse(detector.dl_available)
+            self.assertEqual(prediction.rf_decision, "Engellendi")
+            self.assertEqual(prediction.rf_confidence, 0.85)
+            self.assertIsNone(prediction.dl_decision)
+            self.assertIn("CNN model is unavailable", logged.output[0])
+
     def test_configured_cnn_returns_binary_decision_and_confidence(self):
         class DenseArray:
             shape = (1, 2)

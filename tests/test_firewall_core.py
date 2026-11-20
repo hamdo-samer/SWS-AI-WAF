@@ -91,6 +91,17 @@ class FirewallCoreTests(unittest.TestCase):
 
         self.assertIn("SQL yorum (comment) göstergesi", result.reasons)
 
+    def test_common_query_word_is_not_misread_as_short_base64(self):
+        result = inspect_request(
+            "/index.html",
+            "GET",
+            "category=projects",
+            "TestBrowser/1.0",
+        )
+
+        self.assertEqual(result.score, 0)
+        self.assertEqual(result.decision, "İzin verildi")
+
     def test_command_injection_payload_is_blocked(self):
         result = inspect_request(
             "/ping",

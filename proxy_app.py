@@ -61,8 +61,15 @@ def security_headers(response: Response) -> Response:
     return response
 
 
-@app.route('/', defaults={'path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE'])
-@app.route('/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
+@app.route(
+    '/',
+    defaults={'path': ''},
+    methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'],
+)
+@app.route(
+    '/<path:path>',
+    methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'],
+)
 def proxy(path):
     raw_target = request.environ.get("RAW_URI") or request.environ.get("REQUEST_URI")
     raw_path = raw_target.split("?", 1)[0] if raw_target else "/" + path
@@ -119,7 +126,7 @@ def proxy(path):
             )
             ai_result = AIPrediction(None, None, None, None)
 
-    # 4. تسجيل الطلب في قاعدة البيانات
+    # 4. İsteği veri tabanına kaydet
     add_event(DB_PATH, {
         "source": sanitize_for_log(client_ip()),
         "method": method,
@@ -136,11 +143,11 @@ def proxy(path):
         "attack_type": "Canli Proxy"
     })
 
-    # 5. القرار الأمني (رسالة نصية بسيطة لمنع الانهيار)
+    # 5. Güvenlik kararı (çökmesini önlemek için basit metin mesajı)
     if result.decision == "Engellendi":
         return Response("Smart Web Shield (sws): Tehlikeli istek engellendi! (403 Forbidden)", status=403, mimetype="text/plain")
 
-    # 6. تمرير الطلب الآمن للموقع الحقيقي
+    # 6. Güvenli isteği gerçek siteye yönlendir
     url = f"{TARGET_SITE}{raw_path}"
     if query_string:
         url += f"?{query_string}"

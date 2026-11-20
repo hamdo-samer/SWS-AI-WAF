@@ -65,8 +65,15 @@ def _base64_variants(value: str) -> tuple[str, ...]:
             decoded = raw.decode("utf-8", errors="ignore")
         except (binascii.Error, UnicodeDecodeError):
             continue
-        if decoded:
-            candidates.append(unicodedata.normalize("NFKC", decoded))
+        if len(decoded) < 6:
+            continue
+        printable_ratio = sum(
+            character.isprintable() or character in "\r\n\t"
+            for character in decoded
+        ) / len(decoded)
+        if printable_ratio < 0.85:
+            continue
+        candidates.append(unicodedata.normalize("NFKC", decoded))
     return tuple(dict.fromkeys(candidates))
 
 

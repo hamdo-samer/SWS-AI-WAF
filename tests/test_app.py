@@ -12,6 +12,27 @@ from storage import add_event, recent_events
 
 
 class AppFlowTests(unittest.TestCase):
+    def test_login_rejects_scheme_relative_next_redirect(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = create_app({
+                "TESTING": True,
+                "DATABASE": str(Path(directory) / "test.sqlite3"),
+                "ADMIN_USERNAME": "admin",
+                "ADMIN_PASSWORD": "test-password",
+                "ADMIN_PASSWORD_HASH": "",
+            })
+
+            for next_url in ("//attacker.example/path", "/\\attacker.example/path"):
+                with self.subTest(next_url=next_url):
+                    response = app.test_client().post(
+                        "/giris",
+                        query_string={"next": next_url},
+                        data={"username": "admin", "password": "test-password"},
+                    )
+
+                    self.assertEqual(response.status_code, 302)
+                    self.assertEqual(response.headers["Location"], "/panel")
+
     def test_ai_assessments_show_normalized_labels_and_confidence(self):
         self.assertEqual(_format_ai_assessment("Engellendi", 0.92), "Anomali (%92)")
         self.assertEqual(_format_ai_assessment("İzin verildi", 0.98), "Normal (%98)")
@@ -165,6 +186,38 @@ class AppFlowTests(unittest.TestCase):
             detector.predict.assert_called_once_with(
                 "GET", "/urunler", "category=books"
             )
+
+    def test_manual_inspection_keeps_rule_result_when_ai_inference_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "test.sqlite3"
+            with patch("app.AIDetector") as detector_factory:
+                detector = detector_factory.return_value
+                detector.is_available = True
+                detector.rf_available = True
+                detector.dl_available = False
+                detector.predict.side_effect = RuntimeError("model unavailable")
+                app = create_app({
+                    "TESTING": True,
+                    "DATABASE": str(database),
+                })
+
+                with self.assertLogs("app", level="ERROR"):
+                    response = app.test_client().post(
+                        "/incele",
+                        data={
+                            "path": "/urunler",
+                            "method": "GET",
+                            "user_agent": "TestBrowser/1",
+                        },
+                    )
+
+            event = recent_events(database)[0]
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(event["decision"], "İzin verildi")
+            self.assertIsNone(event["ai_rf_result"])
+            self.assertIsNone(event["ai_dl_result"])
+            detector.predict.assert_called_once_with("GET", "/urunler", "")
 
     def test_simulation_rejects_unknown_scenario(self):
         with tempfile.TemporaryDirectory() as directory:

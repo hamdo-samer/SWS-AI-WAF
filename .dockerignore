@@ -1,0 +1,14 @@
+.env*
+.git
+.venv
+.vscode
+__pycache__
+**/__pycache__
+*.py[cod]
+instance
+data
+tests
+train_models.py
+models/*.joblib
+models/*.keras
+models/metrics.json

@@ -43,21 +43,24 @@ Parola hash'i üretmek için:
 python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash(input('Yeni parola: ')))"
 ```
 
+Hash değerini `.env` içine yazarken tek tırnakla çevreleyin. Hash içindeki `$`
+karakterleri Docker Compose tarafından değişken olarak yorumlanmamalıdır.
+
 Dashboard rotaları oturum tabanlı girişle korunur; `/panel`, `/gunluk`, `/api/ozet` ve export rotaları için giriş gerekir.
 
 Canlı proxy demosu için, `http://127.0.0.1:8080` adresinde erişilebilir bir upstream
 site varken `python proxy_app.py` çalıştırın. Proxy, upstream'e iletmeden önce yol,
 sorgu ve en fazla 1 MiB'lık istek gövdesini kural motoruyla inceler. AI tahmini
 danışma amaçlıdır; model çalışmazsa hata günlüğe kaydedilir ve karar kural motorunda
-kalır. `app.py` ile `proxy_app.py` varsayılan olarak aynı portu (5000) kullandığından,
-ikisini aynı anda çalıştırmak için port yapılandırmasını ayrıca değiştirmek gerekir.
+kalır. `app.py` varsayılan olarak 5000, `proxy_app.py` ise 8081 portunu kullanır;
+bu varsayılanlarla iki hizmet aynı anda çalışabilir.
 
 `my_website/` klasörü, canlı Proxy demosunda hedef web uygulaması (Target Web
 Application) olarak kullanılmak üzere eklenen statik Deniz Dekorasyon sitesidir.
 Bu siteyi korumak için upstream hizmeti olarak sunun ve Proxy'yi başlatmadan önce
 `BACKEND_URL` değerini bu hizmetin adresine ayarlayın.
-Docker Compose varsayılan olarak Nginx kullanır ve `my_website/` klasörünü
-otomatik olarak backend'e bağlamaz.
+Docker Compose, `my_website/` klasörünü salt okunur olarak Nginx backend'ine bağlar;
+bu nedenle Proxy üzerinden açılan varsayılan hedef gerçek statik Deniz Dekorasyon sitesidir.
 
 ## Sayfalar
 
@@ -101,9 +104,12 @@ raporlar. Bu özellikler değişirse modelleri yeniden eğitin. Eğitim
 `models/random_forest.joblib`, `models/vectorizer.joblib`,
 `models/1d_cnn.keras` ve elde tutulan test bölümü için `models/metrics.json`
 üretir. Modellerin karşılaştırması kontrol panelinde görünür. Ana uygulama
-bağımlılıklarıyla RF modeli kullanılabilir; CNN için TensorFlow gerekir. Model
-dosyalarını yalnızca güvendiğiniz kaynaktan yükleyin: joblib dosyaları Python
-kodu çalıştırabilir. Modeller eğitilmemişse uygulama AI çıktısı uydurmaz.
+bağımlılıklarıyla RF modeli kullanılabilir. CNN dosyası bulunduğu halde TensorFlow
+yüklü değilse uygulama RF ile çalışmayı sürdürür, CNN tahminini devre dışı bırakır
+ve uyarı yazar. CNN eğitimi ve çıkarımı için `requirements-training.txt` içindeki
+TensorFlow bağımlılığı gerekir. Model dosyalarını yalnızca güvendiğiniz kaynaktan
+yükleyin: joblib dosyaları Python kodu çalıştırabilir. Modeller eğitilmemişse
+uygulama AI çıktısı uydurmaz.
 
 Bu bir eğitim demosudur; ağ trafiğini yönlendirmez, gerçek sitelere istek göndermez ve üretim ortamında kullanılan bir web uygulaması güvenlik duvarının yerine geçmez. Canlıya almadan önce kimlik doğrulama, CSRF koruması, TLS, güvenlik testleri ve uzman incelemesi eklenmelidir.
 
@@ -116,6 +122,14 @@ Copy-Item .env.example .env
 docker compose up --build
 ```
 
+Docker imajı hem Random Forest hem 1D-CNN çıkarımını desteklemek için eğitim
+gereksinimlerini, PDF dışa aktarımı için DejaVu yazı tipini ve çalışma zamanı
+bağımlılıklarını kurar. TensorFlow nedeniyle imaj boyutu temel Flask imajından
+daha büyüktür. Compose, ana makinedeki `models/` klasörünü konteynerlere salt
+okunur bağlar; model dosyaları Git'te tutulmadığı için ML kullanılacaksa modelleri
+`docker compose up --build` öncesinde ana makinede eğitin veya güvenilir kaynaktan
+yerleştirin. Modeller yoksa kural motoru çalışır, ML tahmini kullanılamaz.
+
 - Dashboard: `http://127.0.0.1:5000`
 - Proxy: `http://127.0.0.1:8081`
-- Örnek backend: Docker Compose içindeki `backend` servisi
+- Örnek backend: Yalnızca Compose ağı içinde çalışır ve Proxy üzerinden erişilir

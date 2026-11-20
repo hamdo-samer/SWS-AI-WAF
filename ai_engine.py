@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -79,11 +80,13 @@ class AIDetector:
         if has_cnn_model:
             try:
                 tensorflow = importlib.import_module("tensorflow")
-            except ImportError as error:
-                raise RuntimeError(
-                    "Install the optional TensorFlow training dependencies to load the CNN model."
-                ) from error
-            self._cnn_model = tensorflow.keras.models.load_model(self.cnn_model_path)
+            except ImportError:
+                logging.getLogger(__name__).warning(
+                    "CNN model is unavailable because TensorFlow is not installed; "
+                    "install requirements-training.txt to enable it."
+                )
+            else:
+                self._cnn_model = tensorflow.keras.models.load_model(self.cnn_model_path)
 
     @property
     def is_available(self) -> bool:

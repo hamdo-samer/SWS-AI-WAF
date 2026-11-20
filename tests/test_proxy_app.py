@@ -9,6 +9,41 @@ from storage import initialize, recent_events
 
 
 class ProxyAppTests(unittest.TestCase):
+    def test_supported_http_methods_are_forwarded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "proxy.sqlite3"
+            initialize(database)
+            client = proxy_app.app.test_client()
+            upstream_response = SimpleNamespace(
+                content=b"ok",
+                status_code=200,
+                headers={"Content-Type": "text/plain"},
+            )
+
+            for method in ("PATCH", "HEAD", "OPTIONS"):
+                with self.subTest(method=method):
+                    with (
+                        patch.object(proxy_app, "DB_PATH", str(database)),
+                        patch.object(
+                            proxy_app.ai_detector,
+                            "predict",
+                            return_value=proxy_app.AIPrediction(None, None, None, None),
+                        ),
+                        patch.object(
+                            proxy_app.requests,
+                            "request",
+                            return_value=upstream_response,
+                        ) as forward_request,
+                    ):
+                        response = client.open(
+                            "/products",
+                            method=method,
+                            headers={"User-Agent": "TestBrowser/1.0"},
+                        )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(forward_request.call_args.kwargs["method"], method)
+
     def test_static_asset_skips_ai_even_with_query_string(self):
         with tempfile.TemporaryDirectory() as directory:
             database = Path(directory) / "proxy.sqlite3"
@@ -122,10 +157,11 @@ class ProxyAppTests(unittest.TestCase):
                     return_value=upstream_response,
                 ) as forward_request,
             ):
-                response = client.get(
-                    "/products",
-                    headers={"User-Agent": "TestBrowser/1.0"},
-                )
+                with self.assertLogs("proxy_app", level="ERROR"):
+                    response = client.get(
+                        "/products",
+                        headers={"User-Agent": "TestBrowser/1.0"},
+                    )
 
             self.assertEqual(response.status_code, 200)
             forward_request.assert_called_once()
